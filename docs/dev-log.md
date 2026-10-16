@@ -1,10 +1,146 @@
 # Geliştirme günlüğü
 
+## 17.10.2026 — 0.7.0 native teslim doğrulaması
+
+Üretim kaynak commit'i `b6766a0`; ayrı sürüm commit'i
+`cf38c6323fbca434b72e0f82a227d2c44d621ed3`. Bütün derleme/paket sürümleri tek
+`VERSION` girdisinden 0.7.0 alır. Bu bölüm güncel teslim kaydıdır; aşağıdaki
+16 Ekim kayıtları aşama geçmişidir. Açıklamalı yerel `v0.7.0` etiketi paketle
+aynı `cf38c63` kaynak commit'ini işaretler. Remote değiştirilmedi; push yapılmadı.
+
+### Final derleme, paket ve UI kanıtı
+
+- Yerel kapı, 00:02 +03, temiz `cf38c63`: native 5/5 CTest (0,01 sn), isteğe
+  bağlı Qt referansı 9/9 (0,49 sn), exit 0. macOS'ta Windows adaptörleri ve WinUI
+  açık SKIP; onların Windows sonuçları aşağıdadır.
+- Windows temiz native build: 10/10 CTest, 1,72 sn, exit 0. WinUI tam Rebuild
+  bütün kaynakları yeniden derledi. Kaynak arşivindeki 152 dosya derleme öncesi,
+  paket öncesi ve paket sonrasında SHA-256 ile aynı commit'e eşleşti.
+- 00:05 +03 final paket: 261 payload dosyası, 58.098.185 bayt; 999 statik DLL
+  import çözümü. 6 kurulum × 263 SHA-256, 6 temiz PATH smoke, eşzamanlı kurulum,
+  kilitli eski dosya/sentinel profil koruma, başarısız kurulum onarımı PASS.
+  GUI otomatik açılışı bastırma opt-in senaryosu paketleme kapısında SKIP.
+- Installer 21.709.312 bayt; SHA-256
+  `5a3dfd3e1f5dcfd2d424d243980f830cbd5c8e4884836d10b1298319bd4495cc`.
+  ZIP 22.532.217 bayt; SHA-256
+  `29eb0546c3a2f66f5e2c6b4668dfc1797c9a8d3b1f24ca5c15a4a267a82b83c2`.
+  Yerelde indirilen iki artifact hash'i, ZIP CRC ve 263 arşiv girdisi doğrulandı.
+  Dosyalar: `build-check/artifacts/release-native-0.7.0/`.
+- Final 0.7 paketinden WinUI 15/15 GUI kontrolü ve panelin 7 üretim senaryosu
+  ile ayarlar süreç yaşam döngüsü PASS. Gerçek profil değişmedi, tüm test süreçleri
+  normal kapandı. Panel hazır olma ölçümü 230,113 ms; runtime hata bayrağı false.
+  Kanıt: `build-check/measurements/native-release-0.7.0/{settings-ui,panel-ui}/`.
+- Gerçek final Windows görselleri incelendi ve `docs/screenshots/native-0.7-*.png`
+  altında sürüm kontrollü saklandı. Önceki Qt ekranları tarihsel karşılaştırma
+  için korundu. Yeni ekranlar sentetik test profilini gösterir.
+- Gerçek görev çubuğu dar çekimi: 2560×48, DPI96, DISPLAY1 2560×1440;
+  panel bölgesi `[136,1400–473,1432]` çekim anında boş. Odağın HWND'si ve mevcut
+  profil hash'i değişmedi. Kanıt: `build-check/measurements/taskbar-before/`.
+  Bu özel çekim otomatik onay denetiminde iki kez reddedildi; kullanıcıdan
+  işlem bazlı onay alındıktan sonra tamamlandı ve geçici görev kaldırıldı.
+
+### Üretim tüketim ölçümü
+
+17 Ekim 00:08–00:19 +03, aynı zion-based oturumunda native önce, Qt sonra;
+12 mantıksal işlemci, 5 saniye ısınma, 1 saniye örnekleme. Panel başına
+300 saniye/298 örnek; yalnız başlatılan ana süreç ölçüldü, ilk açılış ve alt
+süreç/GPU/toplam sistem tüketimi kapsam dışıdır. İki profil de bir
+geri sayım ve üç dünya saati içerir; native önizleme 620 DIP, Qt benchmark
+520 piksel genişliğindedir. Sonuç tek koşudur, eşzamanlı veya aynı piksel
+yerleşiminde kontrollü genel performans garantisi değildir.
+
+| Süreç | Tepe özel bellek | Tepe çalışma kümesi | CPU süresi | Tek çekirdek CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Native 0.7 panel | 53,34 MiB | 44,09 MiB | 0,171875 sn | %0,057291 |
+| Qt 0.6.2 referans | 167,27 MiB | 86,83 MiB | 0,546875 sn | %0,182291 |
+| WinUI ayarlar, 60 sn/61 örnek | 88,59 MiB | 100,95 MiB | 0,109375 sn | %0,182288 |
+
+Native ve WinUI süreli çalışma sonunda normal kapandı; Qt benchmark ölçüm
+sonrası kendi PID'siyle sonlandırıldı. Qt TTL 330 sn, native TTL 308 sn
+olduğundan beş saniyelik cleanup penceresi aynı değildir; bu sonuç Qt
+kapanış hatası olarak yorumlanmaz. Qt'nin ilk özel bellek örneği 83,49 MiB,
+son örneği 167,27 MiB; kısa prototip ölçümüyle tepe farkının nedeni bu koşuda
+gözlenen büyümedir, kök nedeni bu teslim kapsamında teşhis edilmedi.
+Gerçek profil hash'i aynı kaldı. Ham kanıt:
+`build-check/measurements/native-release-0.7.0/visible/`.
+
+Gizli durum ayrı 60 saniyelik koşuda sınandı: her süreçte 61/61 örnekte
+gizlilik doğrulandı. Native son özel bellek 53,34 MiB (tepe 53,43), Qt 84,12
+MiB (tepe 84,27); ikisinde de ölçülen CPU artışı 0,000 sn. Bu değer ölçüm
+çözünürlüğünde sıfırdır. Native normal kapandı; Qt'nin yalnız test PID'si
+aynı TTL/cleanup farkıyla sonlandırıldı. Profil değişmedi, geçici görev silindi.
+Kanıt: `build-check/measurements/native-release-0.7.0/hidden/`.
+
+### Gerçek kullanıcı kurulumu
+
+00:25 +03 gerçek kullanıcı kurulumu exit 0: yeni dizin
+`%LOCALAPPDATA%\w11widget\app\0.7.0-B00D4369-2DCE-41EF-A9E4-57E5C65BA61D`.
+263 yeni dosyanın hash'i paketle eşleşti; önceki 0.6.2 kurulumunun 1.584
+dosyası, profil ve başlangıç kayıtları değişmedi. Önceki dizin korunuyor.
+Kurulum `--quiet --no-launch` ile yapıldı; setup log `ready/skipped-no-launch`.
+Kurulum kanıtı: `build-check/measurements/native-release-0.7.0/installation.json`.
+
+Kurulum öncesi byte doğrulanmış profil yedeği:
+`%LOCALAPPDATA%\w11widget-dev\installation-native-0.7.0\rollback\settings.json`.
+Eski dosyaların hash manifesti aynı dizinde `old-install-files.json`.
+
+İlk iki gerçek profil UI denemesi test betiğinin managed UIA
+`GetCurrentSelection` çağrısı ve çok erken `MainModule` sorgusu nedeniyle
+başarısız oldu; PASS sayılmadı. Seçim
+`SelectionPattern.Current.GetSelection()` ile, süreç kimliği pencere hazır
+olduktan sonra tutulan handle üzerinden `QueryFullProcessImageNameW` ile
+doğrulanıyor. Her iki denemede de profil aynı kaldı; sahipliği doğrulanan
+test paneli normal Çıkış ile kapatıldı. Uygulama binary'leri değiştirilmedi.
+Üçüncü denemede TimePicker erişilebilir adı içindeki U+200E yönlendirme
+işaretleri saat karşılaştırmasını bozdu. Ekran 18:00 gösteriyordu; yalnız
+yönlendirme işaretleri testte normalize edildi. Ölçülen erişilebilir adla
+18:00 kabul / 19:00 ret kontrolü geçti. Bu deneme de PASS sayılmadı.
+
+00:33 +03 `installed-ui-04`: altı işlev grubu PASS, exit 0. Gerçek üç
+widget'ın kimlikleri, sırası, etiketleri ve tür bazlı ayarları birebir korundu;
+geometri ve görünüm değerleri değişmedi. Onaylanan boş bölgenin bağlamı ayar
+arayüzünden kaydedildi. Panel `[136,1400–473,1432]` konumunda; ayarlar normal
+kapandı, panel kaldı. İlk widget UIA Invoke ile açıldı, popup görüntülendi ve
+Escape ile kapandı. Beş ekran incelendi. Native runtime hazır süresi
+231,889 ms, `profile_valid=true`, `runtime_failed=false`.
+Kanıt: `build-check/measurements/native-release-0.7.0/installed-ui-04/`.
+
+00:34 +03 `installed-rollback`: dört kontrol grubu PASS. Testin kendi 0.7
+paneli normal Çıkış ile kapandı; korunan 0.6.2 uygulamasının ayarları görünür
+olarak açıldı ve kendi Çıkış düğmesiyle exit 0 kapandı. Profil baytları aynı
+kaldı. Kurulu 0.7 yeniden açıldı, tam taskbar konumu doğrulandı ve çalışır
+bırakıldı (PID 7068, başlangıç 00:34:10 +03). İki ekran incelendi.
+Kanıt: `build-check/measurements/native-release-0.7.0/installed-rollback/`.
+
+00:35 +03 kurulum sonrası görev çubuğu çekimi de incelendi: 2560×48,
+DPI96; panel hava durumu, Başlat ve uygulama simgeleriyle örtüşmüyor.
+Çekim öncesi/sonrası odak HWND'si, profil hash'i ve kurulu panel PID'si aynı.
+Kanıt: `build-check/measurements/native-release-0.7.0/taskbar-after/`.
+
+00:37 +03 tamamlanan 22 test görevi, komut/durum/tetikleyici guard'ları ve
+22/22 SHA-256 doğrulanmış XML yedeğiyle kaldırıldı. Çekim ve gizli ölçüm
+görevleri de kendi doğrulamalarından sonra kaldırıldı; süreçler durdurulmadı.
+00:38 +03 son salt okunur kontrol PASS: doğru kurulumdan tek 0.7 paneli
+(PID 7068), sıfır ayarlar süreci, sıfır geçici w11widget görevi; profil ve
+kurulum öncesi yedek hash'leri beklenen değerlerle aynı.
+Kanıt: `build-check/measurements/native-release-0.7.0/final-running-state.json`
+ve `task-cleanup-{21,rollback}/`.
+
+### Kapsam sınırları
+
+Temiz ikinci Windows kurulumu, Narrator, fiziksel çoklu ekran/DPI değişimi,
+gerçek uyku/dönüş ve Explorer yeniden başlatması bu teslimde çalıştırılmadı.
+Geometri ve ilgili yaşam döngüsü hesaplarının başsız testleri, gerçek donanım
+senaryolarının yerine sayılmaz. İncelenen görev çubuğu alanı bu oturumun
+geometrisine aittir; simgelerin gelecekteki yer değişimini otomatik algılama
+özelliği yoktur. Altı ek widget katalogda planlıdır; sağlayıcı/izin/yaşam
+döngüsü tamamlanmadan etkinleştirilmez. İmzalama ve genel yayın yapılmadı.
+
 ## 16.10.2026 — Onaylanan native 0.7 üretim geçişi
 
 Kullanıcı prototip ölçümlerinin ardından yerel mimariyle 0.7 üretimini, zion-based
-kurulumunu ve testi onayladı. Bu bölüm güncel durumdur; aşağıdaki hazırlık ve
-prototip kayıtları ölçüm geçmişidir. Kaynak tabanı `29c7df1` + üretim çalışma ağacı.
+kurulumunu ve testi onayladı. Bu bölüm üretim geçişinin geliştirme geçmişidir;
+son teslim sonucu üstteki 17 Ekim kaydındadır. Kaynak tabanı `29c7df1` + üretim çalışma ağacı.
 
 ### Uygulanan üretim davranışı
 
@@ -72,7 +208,7 @@ prototip kayıtları ölçüm geçmişidir. Kaynak tabanı `29c7df1` + üretim �
   `native-production-settings-07/settings-{widgets,layout,appearance}.png`.
   Üç ayar sayfası ve odak popup'ı görüntülenerek incelendi.
 
-### Devam eden teslim adımları
+### Teslim doğrulamasına geçerken kalanlar (tarihsel)
 
 0.7 sürüm commit'i, final kaynak-parite kontrolü ve
 paketi, üretim tüketim ölçümü, gerçek kullanıcı kurulumu/görsel kontrol ve geri

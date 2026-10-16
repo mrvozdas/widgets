@@ -28,6 +28,8 @@ w11widget.exe --background
 
 Settings have three pages: widgets, placement and appearance. Changes are saved together with **Uygula**; **Geri al** reloads the saved file. Theme choices include Windows, light and dark, with a separate panel opacity control.
 
+![Native Windows settings](docs/screenshots/native-0.7-widgets.png)
+
 ## Placement
 
 Select a monitor, side, width and edge offset. Compact presets provide starting dimensions. The placement preview shows the selected region; it does not detect gaps between taskbar icons.
@@ -35,6 +37,8 @@ Select a monitor, side, width and edge offset. Compact presets provide starting 
 Confirm that the chosen region does not cover Start, application icons or the clock before applying it. Confirmation is tied to the selected monitor, taskbar geometry and DPI. Changing that context requires confirmation again. When placement is unconfirmed or unavailable, the panel opens as a floating preview rather than occupying an unapproved taskbar region. Auto-hidden or unsupported taskbar layouts cannot be confirmed as normal panel placement.
 
 Widgets that do not fit are available through the overflow menu. The settings button remains accessible.
+
+![Placement settings](docs/screenshots/native-0.7-layout.png)
 
 ## Widgets
 
