@@ -31,7 +31,7 @@ $lines = @(
     '.Set MaxDiskSize=0'
 )
 
-Get-ChildItem -LiteralPath $PackageDirectory -Recurse -File |
+Get-ChildItem -LiteralPath $PackageDirectory -Recurse -File -Force |
     Sort-Object FullName |
     Group-Object DirectoryName |
     ForEach-Object {

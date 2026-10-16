@@ -1,5 +1,84 @@
 # Geliştirme günlüğü
 
+## 16.10.2026 — Onaylanan native 0.7 üretim geçişi
+
+Kullanıcı prototip ölçümlerinin ardından yerel mimariyle 0.7 üretimini, zion-based
+kurulumunu ve testi onayladı. Bu bölüm güncel durumdur; aşağıdaki hazırlık ve
+prototip kayıtları ölçüm geçmişidir. Kaynak tabanı `29c7df1` + üretim çalışma ağacı.
+
+### Uygulanan üretim davranışı
+
+- Standart C++ yapılandırma/şema göçü, bilinmeyen alan koruması, atomik ve yedekli
+  kayıt, çakışan düzenleme koruması; OS ICU ile IANA/DST ve tek seferlik geri sayım.
+- Native panelde dünya saati, geri sayım, monoton odak sayacı; UIA düğmeleri ve
+  ekran içine yerleşen popup'lar. Gizleme ve uyku odak sayacını duraklatır.
+- Taskbar alanı bağlam/DPI ile onaylanır; değişiklikte güvenli önizlemeye dönülür.
+  Taşan widget'lar menüye alınır. Explorer değiştirilmez; bildirimler olay güdümlüdür.
+- WinUI ayarlarında tür bazlı düzenleme, ekle/kaldır/sırala, görünürlük, yerleşim
+  önizlemesi, hazır konumlar, tema, saydamlık, Uygula/Geri al ve açık hata durumları.
+- İsteğe bağlı ayarlar süreci; tekrar açma aynı süreçte ilgili widget'ı seçer.
+- Üç çalışan widget, altı planlı katalog girdisi. Planlı sağlayıcılar hazır özellik
+  gibi gösterilmez. Qt kaynakları referans/geri dönüş için yerinde korunur.
+- Tek `VERSION` girdisi, Qt gerektirmeyen native derleme/paketleme, self-contained
+  WinUI/CRT, kullanıcı başına sürümlü kurulum ve taşınabilir ZIP.
+
+### Üretim sırasında bulunan hatalar
+
+- COM apartment'ını her JSON çağrısında açıp kapatmak C++/WinRT factory cache'iyle
+  ikinci kayıtta erişim ihlali doğuruyordu. Apartment artık çağıran thread'in ömrü
+  boyunca açık; testler ardışık kayıt ve eşzamanlı yazmayı kapsıyor.
+- Standart Win32 UIA, odak düğmeleri arasında geçerken popup'ı geçici olarak
+  deaktive ediyordu; anında kapatma Sıfırla işlemini yutuyordu. Kapanma 150 ms
+  tek atımlık odak kontrolüyle kararlaştırılıyor; tekrar aktivasyon iptal eder.
+  `native-production-panel-04` reset/gizleme testi geçti; sonra test kodunun
+  PowerShell 5.1 `File.Replace(...,$null)` boş-yol sorunu bulundu ve açık yedek
+  yolu verildi. Başarısız koşular PASS sayılmadı.
+- Ortak yapılandırma başlığı değiştiğinde WinUI incremental derlemesi eski
+  `SettingsStore.obj` dosyasını bıraktı; UI06 heap corruption ile kapandı.
+  MSBuild FileTracker, `%LOCALAPPDATA%` altındaki kaynak başlıklarını bağımlılık
+  takibinden dışlıyor; 2040 başlıklı tlog içinde ortak Configuration.h yoktu.
+  Tam `Rebuild` bütün C++ birimlerini yeniledi. Kanonik Windows derlemesi artık
+  WinUI için `Rebuild` kullanır; kaynak eşleme sonrası stale ABI engellenir.
+  [Microsoft FileTracker kaynağı](https://github.com/dotnet/msbuild/blob/main/src/Utilities/TrackedDependencies/FileTracker.cs#L202-L228)
+- Windows PowerShell 5.1 ZIP üretiminde Compression assembly açık yükleniyor;
+  yollar `/` ile standartlaştırılıyor ve tüm arşiv dosyaları hash ile doğrulanıyor.
+
+### Ölçülmüş ara doğrulama
+
+- 23:53 +03 macOS taşınabilir çekirdek: 5/5 CTest, 1,05 sn, exit 0. Windows/UI
+  testleri bu komutun macOS koşusunda açıkça SKIP. Qt referansı ayrı opt-in kapıda
+  daha önce 9/9 geçti; son üretim derlemesinin yerine sayılmadı.
+- 23:53 +03 zion-based MSVC: 10/10 CTest, 0,74 sn, exit 0; yapılandırma, odak,
+  popup yerleşimi, taskbar geometrisi, shell tek örnek, kayıt, IANA/DST ve smoke.
+- `native-production-settings-05`: 13 GUI kontrolü geçti; aynı adlı iki UTC,
+  tipli kayıt, sıralama/görünürlük, tema/yerleşim, bilinmeyen alanlar, Geri al,
+  geçersiz IANA, stale düzenleme ve bozuk profil. Gerçek profil hash'i aynı.
+- `candidate-native-02`: 0.6.2 doğrulama adayı; 261 runtime dosyası / 58.094.063
+  bayt, 999 statik import çözümü. 6 kurulum × 263 dosya hash'i, 6 temiz PATH
+  smoke, eşzamanlı kurulum/kilitli eski dosya/profil koruma/onarım ve ZIP hash
+  doğrulaması geçti. Bu aday 0.7 olarak teslim edilmez.
+
+- `native-production-settings-07`: temiz WinUI Rebuild sonrasında 15/15 GUI
+  kontrolü, task exit 0, normal profil değişmedi ve üç süreç normal kapandı.
+  Bilinmeyen region_context alanı, ilk görünümde yerleşim onayı ve mevcut ayarlar
+  penceresine kimlikle widget seçimi ayrıca geçti.
+
+- `native-production-panel-07` (23:59 +03): 7 üretim GUI senaryosu ve ayarlar
+  yaşam döngüsü PASS, 7,14 sn, task exit 0. Saat/geri sayım popup'ları, odak
+  başlat/duraklat/sıfırla, gizlemede duraklama, atomik ayar bildirimi, tek örnek,
+  açık ayarlarda widget seçimi, dış odakta kapanma, aynı ayarlar PID'sini tekrar
+  kullanma ve kapat/açta yeni PID doğrulandı. Cleanup temiz; gerçek profil aynı.
+  Görseller `build-check/measurements/native-production-panel-07/` ve
+  `native-production-settings-07/settings-{widgets,layout,appearance}.png`.
+  Üç ayar sayfası ve odak popup'ı görüntülenerek incelendi.
+
+### Devam eden teslim adımları
+
+0.7 sürüm commit'i, final kaynak-parite kontrolü ve
+paketi, üretim tüketim ölçümü, gerçek kullanıcı kurulumu/görsel kontrol ve geri
+ dönüş kanıtı henüz tamamlanmadı. Temiz Windows, fiziksel çoklu DPI/ekran,
+Narrator ve gerçek uyku/Explorer yeniden başlatma bu oturumda henüz sınanmadı.
+
 ## 16.10.2026 — 0.7 hazırlığı
 
 Kaynak başlangıcı: `ebde1d8`, Qt sürümü 0.6.2. Uygulama ve prototip değişiklikleri
@@ -200,7 +279,7 @@ kazancı saymadan, 0.7'nin işlevleri taşındıktan sonra aynı senaryolarla ye
 kapandığında bu süreç tamamen kalkıyor. Qt sürümü işlev ve geri dönüş referansı
 olarak korunuyor.
 
-### Kalan
+### Prototip tamamlandığındaki kalanlar (tarihsel)
 
 - 0.7 üretim işlevleri: native görev çubuğu yerleşimi, kalıcı ayarlar/Qt göçü,
   panel-ayarlar bildirimi, gerçek widget popup'ları ve erişilebilir panel eylemleri.

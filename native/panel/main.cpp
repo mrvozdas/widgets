@@ -1,5 +1,6 @@
 #include "ClockReadings.h"
 #include "PanelCore.h"
+#include "ProductionPanel.h"
 #include "locales/tr.h"
 
 #include <windows.h>
@@ -242,7 +243,9 @@ struct Panel {
             MessageBoxW(window, strings::MissingSettings, strings::Title, MB_OK | MB_ICONINFORMATION);
             return;
         }
-        std::wstring command = L"\"" + executable.wstring() + L"\"";
+        const auto isolatedProfile = std::filesystem::temp_directory_path() /
+            (L"w11widget-reference-" + std::to_wstring(GetCurrentProcessId())) / L"settings.json";
+        std::wstring command = L"\"" + executable.wstring() + L"\" --settings-file \"" + isolatedProfile.wstring() + L"\"";
         STARTUPINFOW startup{sizeof(startup)};
         PROCESS_INFORMATION process{};
         if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, 0, nullptr,
@@ -362,13 +365,23 @@ int run(HINSTANCE instance)
     auto options = parseOptions(values, error);
     if (!options) { std::wcerr << error << '\n'; return 2; }
     if (options->help) {
-        std::cout << "w11widget native panel PROTOTYPE (not release 0.7)\n"
-            "--benchmark [--duration-seconds 1..86400] [--metrics-file PATH]\n"
-            "--self-test | --help\nSafe floating window; no taskbar replacement, settings writes or startup registration.\n";
+        std::cout << "w11widget " << W11WIDGET_VERSION << " native Windows panel\n"
+            "--settings | --background [--settings-file ABSOLUTE_PATH]\n"
+            "--duration-seconds 1..86400 --metrics-file PATH\n"
+            "--benchmark (isolated reference renderer) | --self-test | --smoke-test | --version | --help\n";
+        return 0;
+    }
+    if (options->version) { std::cout << W11WIDGET_VERSION << '\n'; return 0; }
+    if (options->smokeTest) {
+        if (!testTimeZones()) return 1;
+        Panel probe;
+        if (!probe.initializeGraphics()) return 1;
+        std::cout << "Native production smoke: PASS\n";
         return 0;
     }
     if (options->selfTest) return testTimeZones() ? 0 : 1;
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+    if (!options->benchmark) return runProductionPanel(instance, *options);
     Panel panel;
     panel.options = *options;
     if (!panel.initializeGraphics()) return 1;
@@ -421,5 +434,5 @@ int run(HINSTANCE instance)
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int)
 {
     try { return w11widget::native::run(instance); }
-    catch (const std::exception& error) { std::cerr << "NATIVE_PROTOTYPE_ERROR " << error.what() << '\n'; return 1; }
+    catch (const std::exception&) { std::cerr << "NATIVE_APPLICATION_ERROR\n"; return 1; }
 }

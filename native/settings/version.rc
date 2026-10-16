@@ -1,0 +1,29 @@
+#include <winres.h>
+#include "version.generated.h"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION W11WIDGET_FILE_VERSION
+ PRODUCTVERSION W11WIDGET_FILE_VERSION
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "FileDescription", "w11widget Settings\0"
+            VALUE "FileVersion", W11WIDGET_VERSION "\0"
+            VALUE "InternalName", "w11widget_native_settings\0"
+            VALUE "OriginalFilename", "w11widget_native_settings.exe\0"
+            VALUE "ProductName", "w11widget\0"
+            VALUE "ProductVersion", W11WIDGET_VERSION "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

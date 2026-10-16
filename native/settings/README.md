@@ -1,19 +1,28 @@
-# Yerel WinUI 3 ayarlar prototipi — iç geliştirme notları
+# Yerel WinUI 3 ayarları — iç geliştirme notları
 
 Bu ayrı C++/WinRT uygulaması, sürekli çalışan Win32 panelinden bağımsız açılır.
 Pencere kapanınca `Application::Exit()` çağrılır; ayarlar uygulaması arka planda
 beklemez. Ürün yürütülebilir dosyası C++'tır; C# veya .NET uygulaması içermez.
 
-Prototipte gerçek WinUI `NavigationView`, `ListView`, `TextBox`, `ToggleSwitch`,
-`NumberBox`, `TimePicker` ve `InfoBar` kontrolleri kullanılır. Widget ekleme,
-kaldırma, sıralama, etiket düzenleme ve tema seçimi oturum içinde çalışır.
-Yerleşim ve opaklık değerleri de oturum içinde tutulur. Her sayfada değişikliklerin
-kaydedilmediği ve çalışan paneli değiştirmediği açıkça yazılır.
+Gerçek WinUI `NavigationView`, `ListView`, `TextBox`, `ToggleSwitch`, `NumberBox`,
+`TimePicker` ve `InfoBar` kontrolleri kullanılır. Widget ekleme, kaldırma, sıralama,
+etiket, saat dilimi, tarih, süre, genişlik ve görünürlük alanları ortak
+`native/core/Configuration.h` modeli üzerinden düzenlenir. Bilinmeyen widget türleri
+ve JSON alanları korunur.
 
-Kalıcı JSON, Qt ayarlarının göçü, panelle IPC ve gerçek monitör seçimi bu ölçüm
-prototipinin kapsamına dahil değildir. Prototip mevcut kullanıcı ayarlarını,
-otomatik başlatmayı veya görev çubuğu yerleşimini değiştirmez. Bu sınır, mimarinin
-ilk açılış, açıkken bekleme ve kapandıktan sonra kaynak tüketimini izole etmek içindir.
+`Uygula`, ortak `SettingsStore` ile beklenen dosya sürümünü kontrol ederek atomik
+kaydetme yapar. Başka bir işlem dosyayı değiştirdiyse çakışma gösterilir; değişiklikler
+sessizce üzerine yazılmaz. `Geri al` diskteki dosyayı yeniden yükler. Bozuk veya
+geçersiz dosya yüklenirse düzenleme ve kaydetme kapatılır; varsayılanlar bu dosyanın
+üzerine yazılmaz. Panel aynı dosyayı izler. Kalıcı ayarlar için normal yol
+`%LOCALAPPDATA%\w11widget\settings.json` konumudur.
+
+Yerleşim gerçek `TaskbarLocator` gözlemine dayanır. Monitör, DPI ve görev çubuğu
+koordinatları açık bölge onayının bağlamına kaydedilir. Yerleşim değiştiğinde veya
+gözlem bu bağlamla uyuşmadığında onay düşer. Önizleme simgelerin boşluğunu algılamaz;
+kullanıcı onayı olmadan paneli gösterme yetkisi üretmez. Kompakt önayarlar da onay
+vermez. Tema ayarlar penceresinde anında önizlenir; panel teması ve opaklığı
+`Uygula` ile kaydedilir.
 
 ## Derleme
 
@@ -37,8 +46,15 @@ nuget.exe restore native\settings\packages.config `
 
 & 'C:\BuildTools2022\MSBuild\Current\Bin\MSBuild.exe' `
   native\settings\w11widget_native_settings.vcxproj `
-  /m /p:Configuration=Release /p:Platform=x64 /v:minimal
+  /t:Rebuild /m /p:Configuration=Release /p:Platform=x64 /v:minimal
 ```
+
+Doğrulama ve paketleme öncesinde tam `Rebuild` gerekir;
+`scripts/build-native.ps1` bunu uygular. MSBuild
+[FileTracker](https://github.com/dotnet/msbuild/blob/main/src/Utilities/TrackedDependencies/FileTracker.cs#L202-L228),
+`%LOCALAPPDATA%` altındaki başlıkları bağımlılık izlemesinden dışlar. Kaynak bu
+dizindeyse artımlı derleme, ortak yapı değişikliklerinden sonra eski nesneleri
+bırakıp ABI uyumsuzluğu oluşturabilir. Tam derleme bu karışımı önler.
 
 Çıktı: `native/settings/out/x64/Release/w11widget_native_settings.exe`.
 `packages`, `obj` ve `out` bu alt dizinde kalır ve git tarafından dışlanır.
@@ -47,27 +63,33 @@ birlikte taşınmalıdır. Yalnız EXE'yi kopyalamak desteklenmez. Uygulama pake
 veya Windows App Runtime yükleyicisi çalıştırmaz.
 Bu self-contained seçeneği Windows App SDK içindir. Ham EXE ayrıca
 `msvcp140.dll`, `vcruntime140.dll` ve `vcruntime140_1.dll` kullanır. Taşınabilir
-prototip hazırlarken `scripts/package-native-prototype.ps1` ile yalnız Visual
+paket hazırlarken `scripts/package-native.ps1` ile yalnız Visual
 Studio'nun `VC\Redist\MSVC\<sürüm>\x64\Microsoft.VC143.CRT` dizinindeki
 dağıtılabilir CRT dosyaları eklenir; System32 veya derleyici dizininden DLL alınmaz.
 Paketleyici x64 PE türünü, kopyaların SHA-256 değerlerini ve statik DLL
 bağımlılıklarını kontrol eder; canlı çalışma testi yerine geçmez.
 
-`$panelExecutable`, `$crtDirectory` ve `$dumpbin` doğrulanmış mutlak dosya/dizin
-yollarıyken, yeni bir çıktı dizinine paketleme:
+Doğrulanmış panel EXE’si ve ayar çıktı diziniyle, yeni bir çıktı dizinine paketleme:
 
 ```powershell
-.\scripts\package-native-prototype.ps1 `
+.\scripts\package-native.ps1 `
   -PanelExecutable $panelExecutable `
   -SettingsDirectory .\native\settings\out\x64\Release `
-  -CrtDirectory $crtDirectory -Dumpbin $dumpbin `
   -OutputDirectory .\build-native-package `
-  -SourceRevision (git rev-parse HEAD)
+  -SourceRevision (git rev-parse HEAD) -VerifyInstaller
 ```
 
-Native panel prototipinin ayarlar düğmesi aynı dizindeki
-`w11widget_native_settings.exe` dosyasını açar. Birleşik ölçüm için panel EXE'si
-ayarların tam çıktı dizinine kopyalanabilir.
+Başlık, EXE `ProductVersion` bilgisi ve derlenen manifest depo kökündeki `VERSION`
+dosyasından gelir. `app.manifest` kaynak şablondur; `obj` altındaki sürümlü kopya
+MSBuild tarafından üretilir. Paketleyici kaynak sürümü ile gerçek EXE sürümünü
+karşılaştırır. Panel aynı dizindeki `w11widget_native_settings.exe` dosyasını açar
+ve kullanılan ayar dosyasını `--settings-file` ile aktarır. `--widget-id` doğrudan
+ilgili widget’ın düzenleyicisini seçer. Zaten açık pencere için
+`native/panel/ProductionPanel.cpp` ve `App.xaml.cpp`, `WM_COPYDATA` etiketi
+`0x57313157` ile aynı protokolü kullanır: en fazla 64 ASCII kimlik karakteri ve
+sonunda NUL bulunan UTF-16 yük. Alıcı yalnız mevcut widget’ı seçer; bu mesaj
+ayar kaydetmez, dosya açmaz ve komut çalıştırmaz. Bu eşleşme iki tarafta birlikte
+korunmalıdır.
 
 ## Ölçüm ve doğrulama
 
@@ -80,7 +102,8 @@ Normal açılış:
 Kendiliğinden kapanan, GUI'si gerçekten açılan ölçüm:
 
 ```powershell
-.\native\settings\out\x64\Release\w11widget_native_settings.exe --duration-seconds 30
+.\native\settings\out\x64\Release\w11widget_native_settings.exe `
+  --settings-file "C:\Temp\w11widget-test\settings.json" --duration-seconds 30
 ```
 
 `--duration-seconds` 1–3600 arası tam sayı kabul eder. Süre verilmezse zamanlayıcı
@@ -94,14 +117,23 @@ tema, Tab ile gezinme, Narrator etiketleri, yüksek karşıtlık ve farklı ekra
 ölçeklerinde kesilme kontrolünü kapsar. Native Windows derlemesi ve canlı GUI
 ölçümü olmadan uygulamanın çalıştığı kabul edilmez.
 
-Panelin tam ayar çıktısının yanında olduğu etkileşimli masaüstü oturumunda:
+İzole üretim UI testi, yeni çıktı dizini içinde kendi fixture dosyasını üretir;
+gerçek kullanıcı profilinin değişmediğini de doğrular. Etkileşimli masaüstünde:
 
 ```powershell
-powershell.exe -NoProfile -MTA -File .\native\panel\test_settings_lifecycle.ps1 `
-  -PanelExecutable $panelExecutable `
-  -OutputDirectory .\build-check\native-lifecycle `
-  -ExerciseSettingsUi -CaptureWindows
+powershell.exe -NoProfile -MTA -File .\native\settings\test_settings_ui.ps1 `
+  -SettingsExecutable .\native\settings\out\x64\Release\w11widget_native_settings.exe `
+  -OutputDirectory .\build-check\native-settings-ui -CaptureWindows
 ```
+
+Test; eşit UTC satırlarını, typed alanları, etkinlik/görünürlük, sıralama,
+tema/önayar, atomik kaydetme, geri alma, hatalı saat dilimi, stale dosya çakışması,
+yeniden açılış, `--widget-id`, açık pencerede doğrulanan widget seçimi, bilinmeyen
+alan korunumu ve bozuk dosyanın üzerine
+yazılmamasını sınar. Görev çubuğunun boşluğunu kullanıcı adına onaylamaz.
+Panel ve ayarların birlikte sınanması için `native/panel/test_settings_lifecycle.ps1`
+yalnız açık `-Production` seçeneğiyle çalıştırılır; bu mod da izole profil üretir.
+Seçeneksiz varsayılan akış eski prototip içindir ve üretim ayarlarıyla kullanılmaz.
 
 UIA istemcisi MTA iş parçacığı kullanır ve Windows PowerShell'in .NET UIA
 istemci sağlayıcılarını açıkça kaydeder. Bu kayıt eksikse standart Win32 düğmesi
@@ -113,7 +145,8 @@ string öğeleri olarak bağlamak, [WinUI issue #11226](https://github.com/micro
 ile belgelenen UIA kardeş döngüsünü tetikleyebilir. Aynı adlı iki UTC saati
 geçerli girdidir; benzersizlik satır kimliğinde sağlanır, kullanıcı etiketi
 değiştirilmez. Etiket düzenleme mevcut satırın içeriğini ve erişilebilir adını
-günceller. Canlı test iki UTC satırını, 4→5→4 akışını ve işlem kapanışını doğrular.
+günceller. UI testi aynı etiketli iki satırı ağaçtan gerçekten okur; sorunu
+kontrolü atlayarak veya etiketleri değiştirerek gizlemez.
 
 ## Sabit bağımlılıklar
 

@@ -1,9 +1,10 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 param(
     [Parameter(Mandatory = $true)][string]$PanelExecutable,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
     [switch]$CaptureWindows,
-    [switch]$ExerciseSettingsUi
+    [switch]$ExerciseSettingsUi,
+    [switch]$Production
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,7 +22,8 @@ if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.Apartme
 }
 
 $panelPath = (Get-Item -LiteralPath $PanelExecutable).FullName
-if ([IO.Path]::GetFileName($panelPath) -ne 'w11widget_native_panel.exe') {
+if ([IO.Path]::GetFileName($panelPath) -ne 'w11widget_native_panel.exe' -and
+    -not ($Production -and [IO.Path]::GetFileName($panelPath) -eq 'w11widget.exe')) {
     throw 'Select the native prototype panel executable, not the installed application.'
 }
 $settingsPath = Join-Path ([IO.Path]::GetDirectoryName($panelPath)) 'w11widget_native_settings.exe'
@@ -45,6 +47,8 @@ public static class NativeLifecycleWindows {
     [DllImport("user32.dll", SetLastError = true)] private static extern bool EnumWindows(EnumWindowProc callback, IntPtr context);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr window, StringBuilder text, int capacity);
+    public static string Caption(IntPtr window) { StringBuilder text = new StringBuilder(2048); GetWindowTextW(window,text,text.Capacity); return text.ToString(); }
     [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect bounds);
     [DllImport("user32.dll")] private static extern IntPtr GetDlgItem(IntPtr window, int controlId);
@@ -52,6 +56,29 @@ public static class NativeLifecycleWindows {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(IntPtr window, StringBuilder name, int capacity);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out int value, int size);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool PostMessageW(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+    [StructLayout(LayoutKind.Sequential)] private struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfoW(IntPtr monitor, ref MonitorInfo info);
+    public static IntPtr FindClassWindow(int processId, string type) {
+        IntPtr selected = IntPtr.Zero;
+        EnumWindowProc find = delegate(IntPtr window, IntPtr unused) {
+            uint owner; GetWindowThreadProcessId(window, out owner);
+            StringBuilder name = new StringBuilder(256); GetClassNameW(window, name, name.Capacity);
+            if (owner == processId && name.ToString() == type) { selected = window; return false; }
+            return true;
+        };
+        EnumWindows(find, IntPtr.Zero); return selected;
+    }
+    public static IntPtr Control(IntPtr parent, int id) { return GetDlgItem(parent, id); }
+    public static bool Visible(IntPtr window) { return IsWindowVisible(window); }
+    public static void Post(IntPtr window, uint message, int value) {
+        if (!PostMessageW(window, message, new IntPtr(value), IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+    public static bool InsideWorkArea(IntPtr window) {
+        Rect bounds; MonitorInfo monitor = new MonitorInfo(); monitor.Size = Marshal.SizeOf(monitor);
+        if (!GetWindowRect(window, out bounds) || !GetMonitorInfoW(MonitorFromWindow(window, 2), ref monitor)) return false;
+        return bounds.Left >= monitor.Work.Left && bounds.Top >= monitor.Work.Top && bounds.Right <= monitor.Work.Right && bounds.Bottom <= monitor.Work.Bottom;
+    }
 
     public static IntPtr FindVisibleWindow(int processId) {
         IntPtr selected = IntPtr.Zero;
@@ -77,7 +104,9 @@ public static class NativeLifecycleWindows {
     }
 
     public static IntPtr FindSettingsButton(int processId) {
-        IntPtr parent = FindVisibleWindow(processId);
+        // An owned flyout can be larger than the panel; identify the production class first.
+        IntPtr parent = FindClassWindow(processId, "w11widget.NativePanel");
+        if (parent == IntPtr.Zero) parent = FindVisibleWindow(processId);
         if (parent == IntPtr.Zero) return IntPtr.Zero;
         // ID 100 is the native prototype's SettingsButton constant in panel/main.cpp.
         IntPtr button = GetDlgItem(parent, 100);
@@ -130,6 +159,7 @@ $result = [ordered]@{
         widgetAddInvoked = $false; widgetAddReturned = $false
         widgetRemoveInvoked = $false; widgetRemoveReturned = $false; widgetCounts = @(); duplicateLabelsVisible = $false
     }
+    production = [ordered]@{ enabled = [bool]$Production; checks = @(); profile = $null }
     profileUnchanged = $null
     cleanupPendingProcessIds = @()
     cleanupErrors = @()
@@ -500,12 +530,126 @@ function Exercise-OwnedSettings([Diagnostics.Process]$Process) {
     $result.ui.status = 'passed'
 }
 
+function Invoke-NativeControl([IntPtr]$Parent, [int]$Id) {
+    $handle = [NativeLifecycleWindows]::Control($Parent, $Id)
+    if ($handle -eq [IntPtr]::Zero) { throw "Native control $Id is missing." }
+    $element = [Windows.Automation.AutomationElement]::FromHandle($handle)
+    if ($element.Current.ProcessId -ne $panel.Id -or $element.Current.ControlType -ne [Windows.Automation.ControlType]::Button -or -not $element.Current.Name) {
+        throw "Native control $Id does not expose an owned, named UIA Button."
+    }
+    ([Windows.Automation.InvokePattern]$element.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()
+}
+function Wait-NativePopup([bool]$Present) {
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $handle = [NativeLifecycleWindows]::FindClassWindow($panel.Id, 'w11widget.WidgetPopup')
+        if (($handle -ne [IntPtr]::Zero) -eq $Present) { return $handle }
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Native popup presence did not become $Present."
+}
+function Native-Check([string]$Name) {
+    $result.production.checks += $Name
+    Save-LifecycleResult
+}
+function Exercise-NativePanel {
+    $root = [NativeLifecycleWindows]::FindClassWindow($panel.Id, 'w11widget.NativePanel')
+    if ($root -eq [IntPtr]::Zero) { throw 'Production panel HWND missing.' }
+    foreach ($entry in @(@(201, 'world-clock'), @(200, 'countdown'))) {
+        Set-LifecycleStage ('native:popup:' + $entry[1])
+        Invoke-NativeControl $root $entry[0]
+        $popup = Wait-NativePopup $true
+        if (-not [NativeLifecycleWindows]::InsideWorkArea($popup)) { throw 'Widget popup exceeds its monitor work area.' }
+        if ($CaptureWindows) { & "$PSScriptRoot\..\..\scripts\capture-window.ps1" -ProcessId $panel.Id -OutputPng (Join-Path $outputPath ('popup-' + $entry[1] + '.png')) | Out-Null }
+        [NativeLifecycleWindows]::Post($popup, 0x0100, 27)
+        $null = Wait-NativePopup $false
+        Native-Check ($entry[1] + ':UIA-invoke,clamped,Escape')
+    }
+    Set-LifecycleStage 'native:focus:start-pause-reset'
+    Invoke-NativeControl $root 203
+    $popup = Wait-NativePopup $true
+    Invoke-NativeControl $popup 302
+    Start-Sleep -Milliseconds 1400
+    Invoke-NativeControl $popup 302
+    $focusHandle = [NativeLifecycleWindows]::Control($root, 203)
+    $focusName = [Windows.Automation.AutomationElement]::FromHandle($focusHandle).Current.Name
+    if ($focusName -notmatch '00:5[89]') { throw "Focus timer did not advance: $focusName" }
+    Invoke-NativeControl $popup 303
+    $deadline = [DateTime]::UtcNow.AddSeconds(3)
+    do {
+        $focusName = [Windows.Automation.AutomationElement]::FromHandle($focusHandle).Current.Name
+        if ($focusName -match '01:00') { break }
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($focusName -notmatch '01:00') {
+        if ($CaptureWindows) { & "$PSScriptRoot\..\..\scripts\capture-window.ps1" -ProcessId $panel.Id -OutputPng (Join-Path $outputPath 'focus-reset-failure.png') | Out-Null }
+        throw "Focus reset failed: UIA=$focusName; HWND=$([NativeLifecycleWindows]::Caption($focusHandle)); popup=$([NativeLifecycleWindows]::Caption([NativeLifecycleWindows]::Control($popup,301)))"
+    }
+    if ($CaptureWindows) { & "$PSScriptRoot\..\..\scripts\capture-window.ps1" -ProcessId $panel.Id -OutputPng (Join-Path $outputPath 'popup-focus.png') | Out-Null }
+    Invoke-NativeControl $popup 302
+    [NativeLifecycleWindows]::Post($root, 0x0111, 402)
+    Start-Sleep -Milliseconds 100
+    if ([NativeLifecycleWindows]::Visible($root)) { throw 'Hide did not hide the panel.' }
+    $null = Wait-NativePopup $false
+    Start-Sleep -Milliseconds 1100
+    [NativeLifecycleWindows]::Post($root, 0x0111, 401)
+    Start-Sleep -Milliseconds 100
+    Invoke-NativeControl $root 203
+    $popup = Wait-NativePopup $true
+    $action = [Windows.Automation.AutomationElement]::FromHandle([NativeLifecycleWindows]::Control($popup,302))
+    if ($action.Current.Name -ne 'Sürdür') { throw 'Hidden focus timer resumed automatically.' }
+    Invoke-NativeControl $popup 305
+    Native-Check 'focus:start,pause,reset,hide-pauses,no-auto-resume'
+
+    Set-LifecycleStage 'native:profile-watch'
+    $fixture = Get-Content -LiteralPath $result.production.profile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $fixture.widgets[1].settings.label = 'UTC changed'
+    $newProfile = $result.production.profile + '.new'
+    [IO.File]::WriteAllText($newProfile, ($fixture | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+    [IO.File]::Replace($newProfile, $result.production.profile, ($result.production.profile + '.before-reload'))
+    $deadline = [DateTime]::UtcNow.AddSeconds(5)
+    do {
+        $clock = [NativeLifecycleWindows]::Control($root,201)
+        # Reload replaces child HWNDs; wait until the replacement control exists.
+        $label = if ($clock -ne [IntPtr]::Zero) { [NativeLifecycleWindows]::Caption($clock) } else { '' }
+        if ($label -like 'UTC changed*') { break }
+        Start-Sleep -Milliseconds 50
+    } while ([DateTime]::UtcNow -lt $deadline)
+    if ($label -notlike 'UTC changed*') { throw 'Atomic profile replacement did not update the panel.' }
+    Native-Check 'atomic-file-change-reloads-panel'
+
+    Set-LifecycleStage 'native:single-instance'
+    $second = Start-Process -FilePath $panelPath -ArgumentList @('--settings-file', ('"' + $result.production.profile + '"')) -PassThru
+    try { if (-not $second.WaitForExit(5000) -or $second.ExitCode -ne 0) { throw 'Second profile launch did not activate existing panel.' } }
+    finally { $second.Dispose() }
+    Native-Check 'same-profile-single-instance'
+}
+
 try {
     Initialize-Win32UiaProvider
-    # This creates a fresh bounded prototype; existing panels or settings instances are never selected.
+    # Each production test owns a separate profile under its output directory.
     Set-LifecycleStage 'panel:start'
+    $launchArguments = @('--benchmark', '--duration-seconds', '180')
+    if ($Production) {
+        $isolated = Join-Path $outputPath 'profile\settings.json'
+        if (Test-Path -LiteralPath $isolated) { throw 'Production test output profile must be new.' }
+        [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($isolated)) | Out-Null
+        $fixture = @{
+            schema_version = 2
+            panel = @{ monitor = 'primary'; side = 'left'; width_dip = 560; offset_dip = 150; opacity = 1.0; hide_for_fullscreen = $false; theme = 'dark' }
+            widgets = @(
+                @{ instance_id='countdown-1'; type_id='countdown'; enabled=$true; visible=$true; width_dip=150; settings=@{label='Geri sayım';target_time='18:00';time_zone='Europe/Istanbul';daily_repeat=$true;target_date=''} },
+                @{ instance_id='clock-1'; type_id='world-clock'; enabled=$true; visible=$true; width_dip=100; settings=@{label='UTC';time_zone='UTC';show_date=$false} },
+                @{ instance_id='clock-2'; type_id='world-clock'; enabled=$true; visible=$true; width_dip=100; settings=@{label='İstanbul';time_zone='Europe/Istanbul';show_date=$false} },
+                @{ instance_id='focus-1'; type_id='focus-timer'; enabled=$true; visible=$true; width_dip=100; settings=@{label='Odak';duration_minutes=1} }
+            )
+        }
+        [IO.File]::WriteAllText($isolated, ($fixture | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+        $result.production.profile = $isolated
+        $launchArguments = @('--settings-file', ('"'+$isolated+'"'), '--duration-seconds', '180', '--metrics-file', ('"' + (Join-Path $outputPath 'panel-metrics.json') + '"'))
+    }
     $panel = Start-Process -FilePath $panelPath -WorkingDirectory ([IO.Path]::GetDirectoryName($panelPath)) `
-        -ArgumentList @('--benchmark', '--duration-seconds', '180') -PassThru `
+        -ArgumentList $launchArguments -PassThru `
         -RedirectStandardOutput (Join-Path $outputPath 'panel.stdout.log') `
         -RedirectStandardError (Join-Path $outputPath 'panel.stderr.log')
     $null = $panel.Handle
@@ -513,6 +657,7 @@ try {
     $result.panelProcessId = $panel.Id
     Set-LifecycleStage 'panel:wait-window'
     $null = Wait-OwnedWindow $panel
+    if ($Production) { Exercise-NativePanel }
     if (@(Get-OwnedSettings).Count -ne 0) { throw 'Settings started before the settings button was invoked.' }
 
     Set-LifecycleStage 'settings:first-open:invoke-panel-button'
@@ -523,6 +668,30 @@ try {
     Set-LifecycleStage 'settings:first-open:wait-window'
     $null = Wait-OwnedWindow $first
     if ($ExerciseSettingsUi) { Exercise-OwnedSettings $first }
+    if ($Production) {
+        Set-LifecycleStage 'native:popup-edit-reuses-settings';
+        $root = [NativeLifecycleWindows]::FindClassWindow($panel.Id, 'w11widget.NativePanel')
+        Invoke-NativeControl $root 201
+        $popup = Wait-NativePopup $true
+        Invoke-NativeControl $popup 304
+        $null = Wait-NativePopup $false
+        $labels = Read-SettingsLabels
+        $editor = Find-OwnedControl $first $labels.displayName ([Windows.Automation.ControlType]::Edit)
+        $deadline = [DateTime]::UtcNow.AddSeconds(5)
+        do {
+            $name = ([Windows.Automation.ValuePattern]$editor.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)).Current.Value
+            if ($name -eq 'UTC changed') { break }
+            Start-Sleep -Milliseconds 50
+        } while ([DateTime]::UtcNow -lt $deadline)
+        if ($name -ne 'UTC changed') { throw 'Popup edit did not select its widget in the existing settings process.' }
+        Native-Check 'popup-edit-selects-widget-in-existing-settings'
+        Set-LifecycleStage 'native:popup-outside-activation'
+        Invoke-NativeControl $root 201
+        $null = Wait-NativePopup $true
+        Invoke-OwnedSettingsButton
+        $null = Wait-NativePopup $false
+        Native-Check 'outside-activation-dismisses-popup'
+    }
     if ($CaptureWindows) {
         Set-LifecycleStage 'settings:first-open:capture'
         & "$PSScriptRoot\..\..\scripts\capture-window.ps1" -ProcessId $first.Id -OutputPng (Join-Path $outputPath 'settings-open.png') | Out-Null
@@ -561,7 +730,10 @@ try {
         & "$PSScriptRoot\..\..\scripts\capture-window.ps1" -ProcessId $panel.Id -OutputPng (Join-Path $outputPath 'panel-after-settings-close.png') | Out-Null
     }
     Set-LifecycleStage 'panel:close'
-    Close-OwnedWindow $panel
+    if ($Production) {
+        [NativeLifecycleWindows]::Post([NativeLifecycleWindows]::FindClassWindow($panel.Id, 'w11widget.NativePanel'), 0x0111, 403)
+        if (-not $panel.WaitForExit(5000) -or $panel.ExitCode -ne 0) { throw 'Production panel did not exit normally.' }
+    } else { Close-OwnedWindow $panel }
     $result.status = 'passed'
 } catch {
     $result.status = 'failed'
@@ -585,7 +757,9 @@ try {
         try {
             Set-LifecycleStage "cleanup:close-owned-process:$($process.Id)"
             if (-not $process.HasExited) {
-                [NativeLifecycleWindows]::RequestClose($process.Id)
+                if ($Production -and $process.Id -eq $panel.Id) {
+                    [NativeLifecycleWindows]::Post([NativeLifecycleWindows]::FindClassWindow($panel.Id, 'w11widget.NativePanel'), 0x0111, 403)
+                } else { [NativeLifecycleWindows]::RequestClose($process.Id) }
                 if (-not $process.WaitForExit(5000)) {
                     $result.cleanupPendingProcessIds += $process.Id
                     Add-CleanupError "Owned prototype process $($process.Id) did not close within five seconds; no forced termination was attempted."

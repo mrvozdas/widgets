@@ -10,6 +10,10 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include "locales/tr.h"
+#ifdef W11WIDGET_NATIVE_PACKAGE
+#include "NativePackageFiles.h"
+#endif
 
 #ifndef W11WIDGET_VERSION
 #define W11WIDGET_VERSION L"unknown"
@@ -311,10 +315,17 @@ int runInstaller(bool quiet, bool noLaunch, std::filesystem::path targetDirector
     }
     record(L"Çıkarılan dosya sayısı: " + std::to_wstring(context.extractedFiles));
     const auto application = targetDirectory / L"w11widget.exe";
+#ifdef W11WIDGET_NATIVE_PACKAGE
+    for (const auto* file : NativePackageFiles) {
+        if (!std::filesystem::is_regular_file(targetDirectory / file))
+            return fail(std::wstring(w11widget::installer::strings::MissingNativePackage) + L"\n" + file);
+    }
+#else
     if (!std::filesystem::is_regular_file(application)
         || !std::filesystem::is_regular_file(targetDirectory / L"platforms" / L"qwindows.dll")
         || !std::filesystem::is_directory(targetDirectory / L"qml" / L"QtQuick"))
         return fail(L"Kurulum paketi eksik: uygulama, Windows eklentisi veya QML klasörü bulunamadı.");
+#endif
     record(L"Application: " + application.wstring());
     record(L"Status: ready");
     if (noLaunch) { record(L"Launch: skipped-no-launch"); return 0; }

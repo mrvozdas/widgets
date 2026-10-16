@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory = $true)][string]$WorkRoot,
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$LiveFixture,
-    [switch]$AllowLiveApplicationLaunch
+    [switch]$AllowLiveApplicationLaunch,
+    [ValidateSet('Qt', 'Native')][string]$PackageKind = 'Qt'
 )
 
 Set-StrictMode -Version Latest
@@ -172,7 +173,9 @@ $Installer = [IO.Path]::GetFullPath($Installer)
 $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory).TrimEnd('\')
 $WorkRoot = [IO.Path]::GetFullPath($WorkRoot)
 $LiveFixture = [IO.Path]::GetFullPath($LiveFixture)
-$lockLibraryName = if (Test-Path -LiteralPath (Join-Path $PackageDirectory 'double-conversion.dll')) {
+$lockLibraryName = if ($PackageKind -eq 'Native') {
+    'Microsoft.UI.Xaml.dll'
+} elseif (Test-Path -LiteralPath (Join-Path $PackageDirectory 'double-conversion.dll')) {
     'double-conversion.dll'
 } else {
     'Qt6Core.dll'
@@ -320,15 +323,21 @@ try {
     if ($result.ExitCode -eq 0 -or @(Get-InstallDirectories).Count -ne $beforeInvalid.Count) {
         throw 'Mutually exclusive installation options were accepted or created another directory.'
     }
+    $smokePattern = if ($PackageKind -eq 'Native') { '(?m)^Native production smoke: PASS\r?$' } else { 'PASS \(all built-in modules loaded' }
     foreach ($target in $targets) {
         $label = 'deployed-smoke-' + [IO.Path]::GetFileName($target)
         $result = Invoke-CheckedProcess (Join-Path $target 'w11widget.exe') '--smoke-test' `
             (Join-Path $runDirectory $label) -CleanQt
-        if ($result.ExitCode -ne 0 -or $result.Output -notmatch 'PASS \(all built-in modules loaded') {
+        if ($result.ExitCode -ne 0 -or $result.Output -notmatch $smokePattern) {
             throw "Deployed smoke failed ($($result.ExitCode)): $($result.Error) See $runDirectory"
         }
     }
-    Write-Host 'PASS: all built-in QML modules load in every fresh copy with development Qt paths removed; panels stay hidden.'
+    $smokeSummary = if ($PackageKind -eq 'Native') {
+        'PASS: native production smoke succeeds in all six fresh copies with development PATH removed; no UI/profile writes.'
+    } else {
+        'PASS: all built-in QML modules load in every fresh copy with development Qt paths removed; panels stay hidden.'
+    }
+    Write-Host $smokeSummary
     $summary = @(
         "PASS: six fresh same-version copies each match $($expected.Count) package SHA256 hashes."
         'PASS: two concurrent installers create different complete directories.'
@@ -336,7 +345,7 @@ try {
         $launchCheck
         "PASS: explicit in-place $lockLibraryName lock reports Windows 32; unlocked repair succeeds."
         'PASS: mutually exclusive --install-root/--extract-to options are rejected.'
-        'PASS: all built-in modules load in every new copy with a clean Qt environment; panels stay hidden.'
+        $smokeSummary
     )
     [IO.File]::WriteAllLines((Join-Path $runDirectory 'verification.txt'), [string[]]$summary)
     Write-Host "INSTALLER VERIFICATION: PASS ($runDirectory)"

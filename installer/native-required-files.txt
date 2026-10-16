@@ -1,0 +1,10 @@
+w11widget.exe
+w11widget_native_settings.exe
+Microsoft.UI.Xaml.dll
+w11widget_native_settings.pri
+Microsoft.UI.pri
+Microsoft.UI.Xaml.Controls.pri
+Microsoft.WindowsAppRuntime.pri
+msvcp140.dll
+vcruntime140.dll
+vcruntime140_1.dll

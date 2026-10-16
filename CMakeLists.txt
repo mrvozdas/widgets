@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(w11widget VERSION 0.6.2 LANGUAGES CXX)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" W11WIDGET_VERSION LIMIT_COUNT 1)
+project(w11widget VERSION "${W11WIDGET_VERSION}" LANGUAGES CXX)
 
 set(W11WIDGET_DISTRIBUTION_NOTICES_DIR "" CACHE PATH
     "Reviewed third-party notices and corresponding library sources for distribution")

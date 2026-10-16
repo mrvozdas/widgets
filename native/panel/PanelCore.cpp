@@ -14,6 +14,10 @@ std::optional<Options> parseOptions(const std::vector<std::wstring>& arguments, 
         const auto& value = arguments[index];
         if (value == L"--benchmark") result.benchmark = true;
         else if (value == L"--self-test") result.selfTest = true;
+        else if (value == L"--smoke-test") result.smokeTest = true;
+        else if (value == L"--version") result.version = true;
+        else if (value == L"--settings") result.settings = true;
+        else if (value == L"--background") result.background = true;
         else if (value == L"--help") result.help = true;
         else if (value == L"--duration-seconds" && !durationSet && index + 1 < arguments.size()) {
             const auto& number = arguments[++index];
@@ -27,6 +31,12 @@ std::optional<Options> parseOptions(const std::vector<std::wstring>& arguments, 
                 return std::nullopt;
             }
             durationSet = true;
+        } else if (value == L"--settings-file" && result.settingsFile.empty() && index + 1 < arguments.size()) {
+            result.settingsFile = arguments[++index];
+            if (result.settingsFile.empty() || result.settingsFile.find(L'"') != std::wstring::npos) {
+                error = L"--settings-file requires an absolute profile path.";
+                return std::nullopt;
+            }
         } else if (value == L"--metrics-file" && result.metricsFile.empty() && index + 1 < arguments.size()) {
             result.metricsFile = arguments[++index];
             if (result.metricsFile.empty()) {
@@ -37,6 +47,10 @@ std::optional<Options> parseOptions(const std::vector<std::wstring>& arguments, 
             error = L"Unknown, repeated or incomplete option: " + value;
             return std::nullopt;
         }
+    }
+    if (result.benchmark && (!result.settingsFile.empty() || result.settings || result.background)) {
+        error = L"The reference benchmark cannot access a production profile.";
+        return std::nullopt;
     }
     if (result.benchmark && !durationSet) result.durationSeconds = 30;
     return result;
