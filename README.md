@@ -1,6 +1,6 @@
 # w11widget
 
-**w11widget 0.6.1**, Windows 11 kullanan 64 bit (x64) bilgisayarlar için geliştirilen bir görev çubuğu panelidir. Farklı şehirlerin saatlerini ve belirlediğiniz bir saate kalan süreyi küçük bir alanda birlikte görmenizi sağlar. Saatler ve geri sayımlar birbirinden bağımsız eklenir, adlandırılır, sıralanır ve gizlenir.
+**w11widget 0.6.2**, Windows 11 kullanan 64 bit (x64) bilgisayarlar için geliştirilen bir görev çubuğu panelidir. Farklı şehirlerin saatlerini ve belirlediğiniz bir saate kalan süreyi küçük bir alanda birlikte görmenizi sağlar. Saatler ve geri sayımlar birbirinden bağımsız eklenir, adlandırılır, sıralanır ve gizlenir.
 
 ![Görev çubuğunda geri sayım ve bağımsız dünya saatleri](docs/screenshots/panel.png)
 
@@ -8,7 +8,7 @@ Görseller gerçek uygulama arayüzünden örnek ayarlarla alınmıştır. Ana g
 
 ## İndirme ve kurulum
 
-İlk GitHub sürümü henüz yayımlanmadı. Yayımlandığında kurulum dosyası [Releases](https://github.com/mrvozdas/widgets/releases) bölümünde `w11widget-0.6.1-installer.exe` adıyla sunulacak. İndirilen dosyanın bütünlüğünü doğrulamak için sürüm açıklamasındaki SHA-256 değeri kullanılabilir.
+Son sürümün [kurulum dosyasını indirin](https://github.com/mrvozdas/widgets/releases/download/v0.6.2/w11widget-0.6.2-installer.exe) veya [Releases](https://github.com/mrvozdas/widgets/releases) bölümünü açın. Dosya adı `w11widget-0.6.2-installer.exe` şeklindedir. İndirilen dosyanın bütünlüğünü sürüm açıklamasındaki SHA-256 değeriyle karşılaştırabilirsiniz. Kurulum dosyası dijital olarak imzalanmamıştır.
 
 1. Releases bölümünden kurulum dosyasını indirin ve çalıştırın.
 2. Kurulum kullanıcı hesabınızın `%LOCALAPPDATA%\w11widget\app\` klasöründe ayrı bir uygulama klasörü oluşturur. Yönetici olarak çalıştırılması gerekmez.
@@ -96,3 +96,7 @@ Saat dilimi için **Uygula**, geri sayımın açılır ayarları için **Kaydet*
 Tercihler kullanıcı hesabınızın `%LOCALAPPDATA%\w11widget\settings.json` dosyasında tutulur. Kesin dosya yolunu **Tanılama** penceresinden görebilirsiniz. Yeni bir kurulum ayrı uygulama klasörü oluşturur ve mevcut tercih dosyasını değiştirmez.
 
 Dünya saatleri ve geri sayımlar bilgisayarın sistem saati ve yerel saat dilimi verileriyle çalışır; bu özellikler için hesap veya internet bağlantısı gerekmez. Bilgisayarın tarihi ya da saati yanlışsa paneldeki hesaplamalar da bundan etkilenir.
+
+## Üçüncü taraf lisansları
+
+Uygulama Qt 6.12 kütüphanelerini kullanır. LGPLv3 metinleri, üçüncü taraf bildirimleri ve ilgili Qt kütüphane kaynakları kurulum klasöründeki licenses bölümünde bulunur. Bu kaynaklar üçüncü taraf kütüphanelerine aittir; uygulamanın kendi kaynakları dağıtılmaz. Uygulamayı çalıştırmak için Python veya geliştirme araçları kurmanız gerekmez.
