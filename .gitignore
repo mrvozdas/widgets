@@ -1,7 +1,4 @@
-# Deny every file by default, including files added in the future.
-*
-
-# Private instructions, development notes and plans: never publish.
+# Private instructions, development notes and publication tooling.
 /devel-log.md
 /sad.md
 /rules.md
@@ -13,23 +10,62 @@
 /.codex/
 /.publish-prep/
 
-# Source code, tests, tools, settings, builds and all historical versions.
-/src/
-/tests/
-/scripts/
-/installer/
-/config/
-/build/
-/build-overlay/
-/CMakeLists.txt
+# CMake and Qt build output; keep source files and build scripts trackable.
+/build*/
+/out/
+/cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+.ninja_deps
+.ninja_log
+build.ninja
+*.user
+CMakeUserPresets.json
 
-# Only the end-user guide, its four images and this policy are versioned.
-# Only the selected final installer is uploaded separately to GitHub Releases.
-!/.gitignore
-!/README.md
-!/docs/
-!/docs/screenshots/
-!/docs/screenshots/panel.png
-!/docs/screenshots/panel-controls.png
-!/docs/screenshots/world-clock-settings.png
-!/docs/screenshots/countdown-settings.png
+# Compiled binaries, installers and debug symbols.
+*.exe
+*.dll
+*.obj
+*.o
+*.lib
+*.a
+*.pdb
+*.ilk
+*.exp
+*.pch
+*.idb
+*.ipch
+
+# Local IDE settings and caches.
+.vs/
+.vscode/
+.idea/
+__pycache__/
+*.py[cod]
+.cache/
+
+# Local credentials and environment overrides.
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.pfx
+*.p12
+/.aws/
+
+# Logs, temporary files and operating-system metadata.
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+Thumbs.db
+Desktop.ini
+.DS_Store
