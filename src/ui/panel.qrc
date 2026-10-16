@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/qml">
+    <file alias="MainPanel.qml">qml/MainPanel.qml</file>
+    <file alias="SampleWidget.qml">qml/SampleWidget.qml</file>
+    <file alias="WorldClockWidget.qml">qml/WorldClockWidget.qml</file>
+    <file alias="CountdownWidget.qml">qml/CountdownWidget.qml</file>
+  </qresource>
+</RCC>

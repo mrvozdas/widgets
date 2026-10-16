@@ -1,0 +1,2 @@
+1 PAYLOAD "@W11WIDGET_PAYLOAD_CAB_NATIVE@"
+1 24 "@CMAKE_CURRENT_SOURCE_DIR@/installer/Bootstrapper.manifest"

@@ -9,6 +9,7 @@
 /.agents/
 /.codex/
 /.publish-prep/
+/docs/manual-test-checklist.md
 
 # CMake and Qt build output; keep source files and build scripts trackable.
 /build*/

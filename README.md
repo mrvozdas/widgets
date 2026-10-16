@@ -97,6 +97,25 @@ Tercihler kullanıcı hesabınızın `%LOCALAPPDATA%\w11widget\settings.json` do
 
 Dünya saatleri ve geri sayımlar bilgisayarın sistem saati ve yerel saat dilimi verileriyle çalışır; bu özellikler için hesap veya internet bağlantısı gerekmez. Bilgisayarın tarihi ya da saati yanlışsa paneldeki hesaplamalar da bundan etkilenir.
 
+## Kaynaktan derleme ve katkı
+
+Kaynak kodu, testler, CMake yapılandırması ve kurulum betikleri bu depoda
+bulunur. Geliştirme için Windows 11 x64, Visual Studio 2022 C++ araçları,
+CMake 3.20+, Ninja ve Qt 6.12 MSVC 2022 64-bit gerekir.
+
+`x64 Native Tools Command Prompt for VS 2022` içinde Qt yolunu ayarlayıp derleme
+betiğini çalıştırın:
+
+```bat
+set W11WIDGET_QT_PREFIX=C:\Qt\6.12.0\msvc2022_64
+scripts\build-panel.cmd
+```
+
+Betik projeyi `build-overlay` klasöründe yapılandırır, derler ve CTest testlerini
+çalıştırır. Uygulamayı yerel derlemeden açmak için
+`scripts\run-panel.cmd --settings` kullanabilirsiniz. Katkı akışı, kurulum paketi
+testi ve pull request kontrol listesi [CONTRIBUTING.md](CONTRIBUTING.md) içindedir.
+
 ## Üçüncü taraf lisansları
 
-Uygulama Qt 6.12 kütüphanelerini kullanır. LGPLv3 metinleri, üçüncü taraf bildirimleri ve ilgili Qt kütüphane kaynakları kurulum klasöründeki licenses bölümünde bulunur. Bu kaynaklar üçüncü taraf kütüphanelerine aittir; uygulamanın kendi kaynakları dağıtılmaz. Uygulamayı çalıştırmak için Python veya geliştirme araçları kurmanız gerekmez.
+Uygulama Qt 6.12 kütüphanelerini kullanır. LGPLv3 metinleri, üçüncü taraf bildirimleri ve ilgili Qt kütüphane kaynakları kurulum klasöründeki licenses bölümünde bulunur. Uygulamanın kendi kaynak kodu bu GitHub deposunda bulunur. Hazır uygulamayı çalıştırmak için Python veya geliştirme araçları kurmanız gerekmez.

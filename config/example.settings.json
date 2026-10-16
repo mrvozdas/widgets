@@ -1,0 +1,60 @@
+{
+  "schema_version": 2,
+  "panel": {
+    "monitor": "primary",
+    "side": "left",
+    "width_dip": 330,
+    "offset_dip": 150,
+    "opacity": 0.95,
+    "hide_for_fullscreen": false
+  },
+  "widgets": [
+    {
+      "instance_id": "countdown-1",
+      "type_id": "countdown",
+      "enabled": true,
+      "visible": true,
+      "width_dip": 72,
+      "settings": {
+        "label": "Geri sayım",
+        "target_time": "18:00",
+        "daily_repeat": true,
+        "time_zone": "Europe/Istanbul",
+        "target_date": ""
+      }
+    },
+    {
+      "instance_id": "world-clock-1",
+      "type_id": "world-clock",
+      "enabled": true,
+      "visible": true,
+      "width_dip": 72,
+      "settings": {
+        "show_date": false,
+        "time_zone": "UTC"
+      }
+    },
+    {
+      "instance_id": "world-clock-2",
+      "type_id": "world-clock",
+      "enabled": true,
+      "visible": true,
+      "width_dip": 72,
+      "settings": {
+        "show_date": false,
+        "time_zone": "America/New_York"
+      }
+    },
+    {
+      "instance_id": "world-clock-3",
+      "type_id": "world-clock",
+      "enabled": true,
+      "visible": true,
+      "width_dip": 72,
+      "settings": {
+        "show_date": false,
+        "time_zone": "Europe/Istanbul"
+      }
+    }
+  ]
+}

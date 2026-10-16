@@ -1,0 +1,9 @@
+# Normalize text in Git while preserving Windows command/script conventions.
+* text=auto
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.rc text eol=crlf
+*.rc.in text eol=crlf
+*.manifest text eol=crlf
+*.png binary
