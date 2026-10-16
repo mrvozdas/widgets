@@ -6,6 +6,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QFormLayout;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -41,8 +42,6 @@ private:
     WidgetHostModel* model_ = nullptr;
     QListWidget* list_ = nullptr;
     QPushButton* add_ = nullptr;
-    QPushButton* worldClock_ = nullptr;
-    QPushButton* countdown_ = nullptr;
     QPushButton* remove_ = nullptr;
     QPushButton* up_ = nullptr;
     QPushButton* down_ = nullptr;
@@ -57,6 +56,9 @@ private:
     QPushButton* applyTimeZone_ = nullptr;
     QLabel* error_ = nullptr;
     QLabel* emptyHint_ = nullptr;
+    QLabel* selectionTitle_ = nullptr;
+    QLabel* detailsHint_ = nullptr;
+    QFormLayout* detailsForm_ = nullptr;
     bool refreshing_ = false;
     bool changing_ = false;
 };

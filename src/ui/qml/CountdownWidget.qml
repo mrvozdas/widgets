@@ -19,6 +19,7 @@ Rectangle {
         targetField.text = widgetModel ? widgetModel.targetTime : "18:00"
         repeatCheck.checked = widgetModel ? widgetModel.dailyRepeat : true
         zoneField.text = widgetModel ? widgetModel.timeZoneId : "Europe/Istanbul"
+        dateField.text = widgetModel ? widgetModel.targetDate : ""
         errorLabel.text = ""
     }
 
@@ -29,7 +30,7 @@ Rectangle {
             "target_time": targetField.text,
             "daily_repeat": repeatCheck.checked,
             "time_zone": zoneField.text,
-            "target_date": countdown.widgetModel.targetDate
+            "target_date": repeatCheck.checked ? "" : dateField.text
         })
         if (Object.keys(normalized).length === 0) {
             errorLabel.text = countdown.widgetModel.lastValidationError
@@ -40,8 +41,12 @@ Rectangle {
             errorLabel.text = error
             return
         }
-        editor.visible = false
+        editor.close()
     }
+
+    Accessible.role: Accessible.Button
+    Accessible.name: widgetModel ? widgetModel.label + " " + widgetModel.displayText : I18n.text("ui.geri_sayim")
+    Accessible.onPressAction: { resetEditor(); editor.openFor(countdown) }
 
     radius: 6
     color: interaction.containsMouse ? "#343945" : "#2a2e37"
@@ -74,110 +79,83 @@ Rectangle {
         onClicked: {
             if (countdown.widgetModel && countdown.widgetModel.active) {
                 countdown.resetEditor()
-                editor.visible = true
+                editor.openFor(countdown)
             }
         }
     }
 
-    Window {
+    WidgetFlyout {
         id: editor
-
-        transientParent: countdown.Window.window
-        flags: Qt.Tool | Qt.FramelessWindowHint
-        modality: Qt.NonModal
-        visible: false
-        x: transientParent
-           ? transientParent.x + Math.max(0, Math.min(countdown.x, transientParent.width - width))
-           : 0
-        y: transientParent
-           ? (transientParent.y >= height + 6
-              ? transientParent.y - height - 6
-              : transientParent.y + transientParent.height + 6)
-           : 0
-        width: 260
-        height: settingsContent.implicitHeight + 20
-        color: "transparent"
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: "#252a33"
-            border.color: "#596574"
-            border.width: 1
-
-            Column {
-                id: settingsContent
-
-                anchors.fill: parent
-                anchors.margins: 10
-                spacing: 7
-
-                Label { text: "Geri sayım ayarları"; color: "#eef1f4"; font.bold: true }
-                TextField {
-                    id: nameField
-                    width: parent.width
-                    placeholderText: "Widget adı"
-                    maximumLength: 40
-                    onAccepted: countdown.saveEditor()
-                }
-                TextField {
-                    id: targetField
-                    width: parent.width
-                    placeholderText: "Hedef saat (HH:mm)"
-                    maximumLength: 5
-                    selectByMouse: true
-                    onAccepted: countdown.saveEditor()
-                    onTextEdited: {
-                        const digitCountBeforeCursor =
-                                text.slice(0, cursorPosition).replace(/[^0-9]/g, "").length
-                        const digits = text.replace(/[^0-9]/g, "").slice(0, 4)
-                        const formatted = digits.length >= 2
-                                          ? digits.slice(0, 2) + ":" + digits.slice(2)
-                                          : digits
-                        if (text !== formatted) {
-                            text = formatted
-                            cursorPosition = digitCountBeforeCursor < 2
-                                             ? digitCountBeforeCursor
-                                             : Math.min(digitCountBeforeCursor + 1, formatted.length)
-                        }
-                    }
-                    Keys.onPressed: function(event) {
-                        if (event.key === Qt.Key_Backspace && cursorPosition === 3) {
-                            cursorPosition = 2
-                            event.accepted = true
-                        } else if (event.key === Qt.Key_Delete && cursorPosition === 2) {
-                            cursorPosition = 3
-                            event.accepted = true
-                        }
-                    }
-                }
-                CheckBox { id: repeatCheck; text: "Günlük tekrar"; checked: true }
-                TextField {
-                    id: zoneField
-                    width: parent.width
-                    placeholderText: "IANA saat dilimi"
-                    text: "Europe/Istanbul"
-                    onAccepted: countdown.saveEditor()
-                }
-                Label {
-                    id: errorLabel
-                    width: parent.width
-                    visible: text.length > 0
-                    wrapMode: Text.Wrap
-                    color: "#ffc7c0"
-                }
-                Row {
-                spacing: 8
-                    Button {
-                        text: "Kaydet"
-                        onClicked: countdown.saveEditor()
-                    }
-                    Button {
-                        text: "İptal"
-                        onClicked: editor.visible = false
-                    }
-                }
-            }
+        objectName: "countdownFlyout"
+        heading: I18n.text("ui.geri_sayim")
+        Label {
+            text: countdown.widgetModel ? countdown.widgetModel.displayText : ""
+            font.pixelSize: 30
+            font.weight: Font.DemiBold
+        }
+        Label { text: I18n.text("ui.ad") }
+        TextField {
+            id: nameField
+            width: parent.width
+            maximumLength: 40
+            Accessible.name: I18n.text("ui.widget_adi")
+            onAccepted: countdown.saveEditor()
+        }
+        Label { text: I18n.text("ui.hedef_saat") }
+        TextField {
+            id: targetField
+            width: parent.width
+            placeholderText: "HH:mm"
+            maximumLength: 5
+            selectByMouse: true
+            Accessible.name: I18n.text("ui.hedef_saat")
+            onAccepted: countdown.saveEditor()
+        }
+        CheckBox { id: repeatCheck; text: I18n.text("ui.her_gun_tekrarla") }
+        Label { text: I18n.text("ui.hedef_tarih"); visible: !repeatCheck.checked }
+        TextField {
+            id: dateField
+            width: parent.width
+            visible: !repeatCheck.checked
+            placeholderText: "YYYY-MM-DD"
+            Accessible.name: I18n.text("ui.hedef_tarih")
+            maximumLength: 10
+            selectByMouse: true
+        }
+        Label {
+            width: parent.width
+            visible: !repeatCheck.checked
+            text: I18n.text("ui.tarihi_bos_birakirsaniz_hedef_saatin_bir_sonraki_gercekl")
+            wrapMode: Text.Wrap
+            opacity: 0.75
+        }
+        Label { text: I18n.text("ui.saat_dilimi") }
+        TextField {
+            id: zoneField
+            width: parent.width
+            placeholderText: "Europe/Istanbul"
+            Accessible.name: I18n.text("ui.iana_saat_dilimi")
+            selectByMouse: true
+            onAccepted: countdown.saveEditor()
+        }
+        Label {
+            id: errorLabel
+            width: parent.width
+            visible: text.length > 0
+            wrapMode: Text.Wrap
+            color: "#c42b1c"
+            Accessible.role: Accessible.AlertMessage
+        }
+        Row {
+            spacing: 8
+            Button { text: I18n.text("ui.kaydet"); highlighted: true; onClicked: countdown.saveEditor() }
+            Button { text: I18n.text("ui.iptal"); onClicked: editor.close() }
+        }
+    }
+    Connections {
+        target: countdown.widgetModel
+        function onActiveChanged() {
+            if (!countdown.widgetModel.active) editor.close()
         }
     }
 }

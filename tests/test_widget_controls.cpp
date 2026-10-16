@@ -1,6 +1,8 @@
 #include "core/WidgetHostModel.h"
 #include "ui/WidgetSettingsDialog.h"
+#include "ui/PlacementPreview.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -12,6 +14,7 @@
 #include <QSpinBox>
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 namespace {
@@ -75,7 +78,8 @@ int main(int argc, char** argv)
     w11widget::WidgetSettingsDialog dialog(&model);
     check(!dialog.isVisible(), "constructing widget settings keeps the dialog hidden");
     auto* list = control<QListWidget>(dialog, "widgetList");
-    auto* add = control<QPushButton>(dialog, "addWidget");
+    auto* catalogButton = control<QPushButton>(dialog, "addWidget");
+    auto* add = control<QAction>(dialog, "add-sample");
     auto* remove = control<QPushButton>(dialog, "removeWidget");
     auto* up = control<QPushButton>(dialog, "moveWidgetUp");
     auto* down = control<QPushButton>(dialog, "moveWidgetDown");
@@ -85,14 +89,25 @@ int main(int argc, char** argv)
     auto* label = control<QLineEdit>(dialog, "widgetLabel");
     auto* accent = control<QComboBox>(dialog, "widgetAccent");
     auto* showDate = control<QCheckBox>(dialog, "worldClockShowDate");
-    auto* addWorldClock = control<QPushButton>(dialog, "addWorldClock");
-    auto* addCountdown = control<QPushButton>(dialog, "addCountdown");
+    auto* addWorldClock = control<QAction>(dialog, "addWorldClock");
+    auto* addCountdown = control<QAction>(dialog, "addCountdown");
     auto* zoneEditor = control<QWidget>(dialog, "worldClockZoneEditor");
     auto* timeZone = control<QComboBox>(dialog, "worldClockTimeZone");
     auto* applyTimeZone = control<QPushButton>(dialog, "applyWorldClockTimeZone");
     auto* errorLabel = control<QLabel>(dialog, "widgetError");
     auto* emptyHint = control<QLabel>(dialog, "widgetEmptyHint");
     if (failures != 0) return 1;
+
+    check(catalogButton->menu() != nullptr, "widget addition exposes a catalog menu");
+    for (const auto* button : dialog.findChildren<QPushButton*>()) {
+        check(!button->autoDefault(), "Enter in an editor cannot activate unrelated manager actions");
+    }
+    for (const auto& descriptor : model.registry().descriptors()) {
+        const auto actions = dialog.findChildren<QAction*>();
+        check(std::count_if(actions.begin(), actions.end(), [&](const QAction* action) {
+            return action->data().toString() == descriptor.typeId;
+        }) == 1, "each registered type appears exactly once in the widget catalog");
+    }
 
     check(list->count() == 2, "all configured widgets appear in settings");
     check(configurationChanges == 0, "initial controls do not rewrite configuration");
@@ -137,7 +152,7 @@ int main(int argc, char** argv)
     check(model.configuration()[1].instanceId == secondId && selectedId(list) == secondId,
           "down moves widget while preserving selection");
 
-    add->click();
+    add->trigger();
     check(model.configuration().size() == 3 && list->count() == 3,
           "add button creates an independent configured widget");
     const auto addedId = selectedId(list);
@@ -155,7 +170,7 @@ int main(int argc, char** argv)
     check(!emptyHint->isHidden(), "empty configuration exposes an explanatory hint");
     check(!enabled->isEnabled() && !label->isEnabled() && !remove->isEnabled(),
           "empty configuration disables instance-only controls");
-    add->click();
+    add->trigger();
     check(model.configuration().size() == 1 && list->count() == 1,
           "an empty configuration can add a new sample");
     enabled->click();
@@ -323,7 +338,7 @@ int main(int argc, char** argv)
           "removing one clock leaves the other clocks unchanged");
 
     const auto beforeAddingClock = model.configuration();
-    addWorldClock->click();
+    addWorldClock->trigger();
     check(model.configuration().size() == beforeAddingClock.size() + 1 && list->count() == 3 &&
               model.configuration()[0] == beforeAddingClock[0] &&
               model.configuration()[1] == beforeAddingClock[1],
@@ -334,12 +349,25 @@ int main(int argc, char** argv)
               !addedClock.settings.contains(QStringLiteral("time_zones")) &&
               selectedId(list) == addedClock.instanceId && !showDate->isChecked(),
           "new clock has one UTC zone, its own identity and independent date preference");
-    addCountdown->click();
+    addCountdown->trigger();
     check(model.configuration().size() == 4 &&
               model.configuration().back().typeId == QStringLiteral("countdown"),
           "the manager adds an independent Countdown beside the separate clocks");
     check(!width->isEnabled() && zoneEditor->isHidden(),
           "Countdown also sizes from content and hides the clock-specific zone editor");
+    label->setText(QStringLiteral("Mesai sonu"));
+    QMetaObject::invokeMethod(label, "editingFinished", Qt::DirectConnection);
+    check(model.configuration().back().settings.value(QStringLiteral("label")).toString() ==
+              QStringLiteral("Mesai sonu"), "Countdown name can be edited in the widget manager");
+
+    w11widget::PlacementPreview placement;
+    placement.resize(528, 110);
+    placement.setPlacement({-1920, 1032, 0, 1080}, {-1770, 1040, -1440, 1072});
+    const auto projected = placement.projectedPanel();
+    check(std::abs(projected.x() - 61.5) < 0.01 && std::abs(projected.width() - 82.5) < 0.01,
+          "placement preview maps negative monitor coordinates to the taskbar's local extent");
+    placement.clearPlacement();
+    check(placement.projectedPanel().isEmpty(), "unavailable placement clears the highlighted region");
 
     if (failures != 0) return 1;
     std::cout << "PASS: hidden widget settings controls and model integration\n";

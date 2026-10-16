@@ -4,5 +4,7 @@
     <file alias="SampleWidget.qml">qml/SampleWidget.qml</file>
     <file alias="WorldClockWidget.qml">qml/WorldClockWidget.qml</file>
     <file alias="CountdownWidget.qml">qml/CountdownWidget.qml</file>
+    <file alias="WidgetFlyout.qml">qml/WidgetFlyout.qml</file>
+    <file alias="FocusTimerWidget.qml">qml/FocusTimerWidget.qml</file>
   </qresource>
 </RCC>

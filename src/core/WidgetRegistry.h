@@ -16,6 +16,7 @@ struct WidgetDescriptor {
     QUrl qmlSource;
     QJsonObject defaultSettings;
     int defaultWidthDip = 120;
+    bool contentSized = false;
 };
 
 class WidgetRegistry {

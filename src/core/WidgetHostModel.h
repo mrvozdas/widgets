@@ -25,7 +25,8 @@ public:
         ComponentSourceRole,
         ViewModelRole,
         LifecycleStateRole,
-        ErrorMessageRole
+        ErrorMessageRole,
+        ContentSizedRole
     };
     Q_ENUM(Role)
 

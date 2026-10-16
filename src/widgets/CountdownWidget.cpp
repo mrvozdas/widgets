@@ -137,7 +137,6 @@ bool CountdownWidget::initialize(const QJsonObject& settings, QString& error)
         initialized_ = false;
         return false;
     }
-    refreshNow();
     return true;
 }
 

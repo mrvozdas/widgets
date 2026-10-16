@@ -342,6 +342,8 @@ void runScenario(Scenario scenario) {
     check(!controls.dialog->isVisible(), "noninteractive startup keeps controls hidden");
     check(fixture.nativeCalls.empty(), "startup never attempts to show an unconfirmed panel");
     check(!controls.watchdog->isActive(), "startup does not poll the idle desktop");
+    check(controls.watchdog->interval() == 5000 && controls.watchdog->timerType() == Qt::VeryCoarseTimer,
+          "event-driven visibility uses a five-second coarse fallback watchdog");
     controller.activateControls();
     check(!controls.dialog->isVisible() && fixture.nativeCalls.empty(),
           "activation requests leave noninteractive fixtures hidden");
@@ -1037,6 +1039,37 @@ w11widget::WidgetHostModel* findWidgetHost() {
     }
     check(false, "controller owns an accessible widget host");
     return nullptr;
+}
+
+void testSettingsNavigationAndPlacementPresets() {
+    runScenario([](Fixture& fixture, Controls& controls) {
+        auto* pages = controls.dialog->findChild<QStackedWidget*>(QStringLiteral("controlPages"));
+        auto* appearance = controls.dialog->findChild<QPushButton*>(QStringLiteral("appearanceNavigation"));
+        auto* layout = controls.dialog->findChild<QPushButton*>(QStringLiteral("layoutNavigation"));
+        auto* right = controls.dialog->findChild<QPushButton*>(QStringLiteral("placementPresetRight"));
+        auto* left = controls.dialog->findChild<QPushButton*>(QStringLiteral("placementPresetLeft"));
+        auto* canvas = controls.dialog->findChild<QWidget*>(QStringLiteral("placementCanvas"));
+        check(pages && appearance && layout && left && right && canvas,
+              "settings expose navigation, placement presets and a visual preview");
+        if (!pages || !appearance || !layout || !left || !right || !canvas) return;
+        appearance->click();
+        check(pages->currentWidget()->objectName() == QStringLiteral("appearancePage"),
+              "appearance navigation opens its settings page");
+        layout->click();
+        check(pages->currentWidget()->objectName() == QStringLiteral("panelControlsPage"),
+              "layout navigation restores the placement page");
+        controls.confirmation->setChecked(true);
+        right->click();
+        check(controls.side->currentIndex() == 1 && controls.width->value() == 330 &&
+                  controls.offset->value() == 150 && !controls.confirmation->isChecked() &&
+                  fixture.nativeCalls.empty(),
+              "right preset updates placement but requires fresh region approval without showing the panel");
+        controls.confirmation->setChecked(true);
+        left->click();
+        check(controls.side->currentIndex() == 0 && !controls.confirmation->isChecked() &&
+                  fixture.nativeCalls.empty(), "left preset also preserves explicit placement approval");
+        expectHiddenWindows();
+    });
 }
 
 void testWidgetLifecycleAndPlacementIndependence() {
@@ -1867,6 +1900,7 @@ int main(int argc, char* argv[]) {
     testFailedRepositionKeepsPinned();
     testOwnWindowEventsDuringShow();
     testPinnedInvalidPlacementKeepsObservedRectangle();
+    testSettingsNavigationAndPlacementPresets();
     testWidgetLifecycleAndPlacementIndependence();
     testWidgetPreferencesSurvivePanelEditsAndRestart();
     testIndependentClockLifecycleAndPlacement();

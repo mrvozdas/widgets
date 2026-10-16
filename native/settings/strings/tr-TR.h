@@ -1,0 +1,51 @@
+#pragma once
+
+namespace native_settings::text {
+inline constexpr auto title = L"w11widget 0.0.1 — Yerel ayarlar prototipi";
+inline constexpr auto product = L"w11widget";
+inline constexpr auto widgets = L"Widget’lar";
+inline constexpr auto layout = L"Yerleşim";
+inline constexpr auto appearance = L"Görünüm";
+inline constexpr auto prototypeTitle = L"Ölçüm prototipi";
+inline constexpr auto prototypeMessage = L"Bu penceredeki değişiklikler yalnızca bu oturumda geçerlidir; kaydedilmez ve çalışan paneli değiştirmez.";
+inline constexpr auto widgetsIntro = L"Widget ekle, adını düzenle ve paneldeki sırasını seç.";
+inline constexpr auto addWidget = L"Widget ekle";
+inline constexpr auto worldClock = L"Dünya saati";
+inline constexpr auto countdown = L"Geri sayım";
+inline constexpr auto focus = L"Odak zamanlayıcısı";
+inline constexpr auto focusLabel = L"Odak";
+inline constexpr auto utc = L"UTC";
+inline constexpr auto newYork = L"New York";
+inline constexpr auto istanbul = L"İstanbul";
+inline constexpr auto enabled = L"Widget etkin";
+inline constexpr auto visible = L"Panelde göster";
+inline constexpr auto switchOn = L"Açık";
+inline constexpr auto switchOff = L"Kapalı";
+inline constexpr auto displayName = L"Görünen ad";
+inline constexpr auto timezone = L"Saat dilimi";
+inline constexpr auto target = L"Hedef saat";
+inline constexpr auto daily = L"Her gün tekrarla";
+inline constexpr auto duration = L"Odak süresi (dakika)";
+inline constexpr auto moveUp = L"Yukarı taşı";
+inline constexpr auto moveDown = L"Aşağı taşı";
+inline constexpr auto remove = L"Widget’ı kaldır";
+inline constexpr auto empty = L"Başlamak için bir widget ekle.";
+inline constexpr auto layoutIntro = L"Panelin ekranını, genişliğini ve kenar boşluğunu düzenle.";
+inline constexpr auto monitor = L"Ekran";
+inline constexpr auto primaryMonitor = L"Birincil ekran";
+inline constexpr auto align = L"Hizalama";
+inline constexpr auto left = L"Sol";
+inline constexpr auto right = L"Sağ";
+inline constexpr auto width = L"Panel genişliği (px)";
+inline constexpr auto offset = L"Kenar boşluğu (px)";
+inline constexpr auto placementNote = L"Yerleşim ayarları bu prototipte yalnızca önizlemedir. Görev çubuğundaki simgeler otomatik algılanmaz.";
+inline constexpr auto appearanceIntro = L"Windows’un doğal açık ve koyu yüzeylerini kullan.";
+inline constexpr auto theme = L"Bu pencerenin teması";
+inline constexpr auto systemTheme = L"Windows ayarını izle";
+inline constexpr auto lightTheme = L"Açık";
+inline constexpr auto darkTheme = L"Koyu";
+inline constexpr auto opacity = L"Panel opaklığı (%)";
+inline constexpr auto appearanceNote = L"Tema bu pencereye hemen uygulanır. Panel opaklığı yalnızca oturum önizlemesidir.";
+inline constexpr auto sessionOnly = L"Oturum önizlemesi · kaydedilmiyor";
+inline constexpr auto close = L"Kapat";
+}

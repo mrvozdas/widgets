@@ -7,6 +7,7 @@
 #include <QVariantList>
 
 #include <vector>
+#include <optional>
 
 namespace w11widget {
 
@@ -41,6 +42,7 @@ class WorldClockWidget final : public QObject, public IWidget {
     Q_PROPERTY(QString turkeyAbbreviation READ turkeyAbbreviation NOTIFY clockChanged)
     Q_PROPERTY(QVariantList clocks READ clocks NOTIFY clockChanged)
     Q_PROPERTY(QString displayName READ displayName NOTIFY clockChanged)
+    Q_PROPERTY(QString details READ detailsText NOTIFY clockChanged)
     Q_PROPERTY(bool showDate READ showDate NOTIFY showDateChanged)
     Q_PROPERTY(bool active READ isActive NOTIFY activeChanged)
     Q_PROPERTY(int preferredWidthDip READ preferredWidthDip CONSTANT)
@@ -60,18 +62,18 @@ public:
     void shutdown() override;
     QObject* viewModel() override { return this; }
 
-    [[nodiscard]] QString utcTime() const { return readings_.utc.time; }
-    [[nodiscard]] QString easternTime() const { return readings_.eastern.time; }
-    [[nodiscard]] QString turkeyTime() const { return readings_.turkey.time; }
-    [[nodiscard]] QString utcDate() const { return readings_.utc.date; }
-    [[nodiscard]] QString easternDate() const { return readings_.eastern.date; }
-    [[nodiscard]] QString turkeyDate() const { return readings_.turkey.date; }
-    [[nodiscard]] QString utcOffset() const { return readings_.utc.utcOffset; }
-    [[nodiscard]] QString easternOffset() const { return readings_.eastern.utcOffset; }
-    [[nodiscard]] QString turkeyOffset() const { return readings_.turkey.utcOffset; }
-    [[nodiscard]] QString utcAbbreviation() const { return readings_.utc.abbreviation; }
-    [[nodiscard]] QString easternAbbreviation() const { return readings_.eastern.abbreviation; }
-    [[nodiscard]] QString turkeyAbbreviation() const { return readings_.turkey.abbreviation; }
+    [[nodiscard]] QString utcTime() const { return legacyReadings().utc.time; }
+    [[nodiscard]] QString easternTime() const { return legacyReadings().eastern.time; }
+    [[nodiscard]] QString turkeyTime() const { return legacyReadings().turkey.time; }
+    [[nodiscard]] QString utcDate() const { return legacyReadings().utc.date; }
+    [[nodiscard]] QString easternDate() const { return legacyReadings().eastern.date; }
+    [[nodiscard]] QString turkeyDate() const { return legacyReadings().turkey.date; }
+    [[nodiscard]] QString utcOffset() const { return legacyReadings().utc.utcOffset; }
+    [[nodiscard]] QString easternOffset() const { return legacyReadings().eastern.utcOffset; }
+    [[nodiscard]] QString turkeyOffset() const { return legacyReadings().turkey.utcOffset; }
+    [[nodiscard]] QString utcAbbreviation() const { return legacyReadings().utc.abbreviation; }
+    [[nodiscard]] QString easternAbbreviation() const { return legacyReadings().eastern.abbreviation; }
+    [[nodiscard]] QString turkeyAbbreviation() const { return legacyReadings().turkey.abbreviation; }
     [[nodiscard]] QVariantList clocks() const;
     [[nodiscard]] QString displayName() const;
     [[nodiscard]] bool showDate() const { return showDate_; }
@@ -93,9 +95,11 @@ signals:
 
 private:
     void scheduleNextRefresh();
+    const WorldClockReadings& legacyReadings() const;
 
     QTimer refreshTimer_;
-    WorldClockReadings readings_;
+    QDateTime readingTime_;
+    mutable std::optional<WorldClockReadings> legacyReadings_;
     std::vector<WorldClockReading> clockReadings_;
     QString label_;
     bool initialized_ = false;

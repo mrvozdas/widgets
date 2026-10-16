@@ -21,6 +21,7 @@ class QWidget;
 class QScreen;
 namespace w11widget {
 class WidgetSettingsDialog;
+class PlacementPreview;
 struct ControllerServices {
     std::function<std::optional<windows::TaskbarSnapshot>(std::string&)> readTaskbar;
     std::function<bool(const windows::TaskbarSnapshot&, WId)> fullscreenConflict;
@@ -85,6 +86,10 @@ private:
     std::unique_ptr<WidgetSettingsDialog> widgetControls_;
     QStackedWidget* controlPages_ = nullptr;
     QWidget* panelControlsPage_ = nullptr;
+    QWidget* appearancePage_ = nullptr;
+    QPushButton* layoutNavigation_ = nullptr;
+    QPushButton* widgetNavigation_ = nullptr;
+    PlacementPreview* placementCanvas_ = nullptr;
     std::unique_ptr<QMenu> trayMenu_;
     std::unique_ptr<QSystemTrayIcon> tray_;
     QComboBox* side_ = nullptr;

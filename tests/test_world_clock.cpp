@@ -72,6 +72,8 @@ void testSettingsAndLifecycle()
     check(clock.clocks().size() == 1 &&
               clock.clocks().first().toMap().value(QStringLiteral("zoneId")) == QStringLiteral("UTC"),
           "omitting the zone cannot create a group of clocks at runtime");
+    check(!clock.utcTime().isEmpty() && !clock.easternTime().isEmpty() && !clock.turkeyTime().isEmpty(),
+          "legacy clock properties remain available through lazy zone conversion");
     check(clock.preferredWidthDip() == WorldClockWidget::PreferredWidthDip &&
               clock.compactWidthDip() == WorldClockWidget::CompactWidthDip &&
               clock.compactWidthDip() < clock.preferredWidthDip(),
@@ -82,6 +84,8 @@ void testSettingsAndLifecycle()
     check(clock.detailsText().contains(QStringLiteral("UTC")) &&
               !clock.detailsText().contains(QStringLiteral("New York")),
           "World Clock details describe only this instance's zone");
+    check(clock.property("details").toString() == clock.detailsText(),
+          "the popup consumes a reactive details property without creating a tooltip window");
     check(clock.updateSettings({
               {QStringLiteral("show_date"), true},
               {QStringLiteral("time_zone"), QStringLiteral("Asia/Tokyo")}

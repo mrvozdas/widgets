@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string]$PackageDirectory,
     [Parameter(Mandatory = $true)][string]$WorkRoot,
     [Parameter(Mandatory = $true)][string]$Version,
-    [Parameter(Mandatory = $true)][string]$LiveFixture
+    [Parameter(Mandatory = $true)][string]$LiveFixture,
+    [switch]$AllowLiveApplicationLaunch
 )
 
 Set-StrictMode -Version Latest
@@ -228,15 +229,24 @@ try {
     $firstLock = [IO.File]::Open((Join-Path $first $lockLibraryName),
         [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 
-    # Omit --no-launch intentionally: only the verified workspace helper should
-    # suppress startup. No actual Qt application is launched during this check.
-    $runningTarget = Invoke-FreshInstall 'running-install' -AllowLaunch
-    $runningLog = Assert-ReadyLog $runningTarget 'skipped-running'
-    $runningLine = @($runningLog -split '\r?\n' | Where-Object {
-        $_ -match ('^Running: PID ' + $fixture.Id + ' ')
-    })
-    if ($runningLine.Count -ne 1 -or -not $runningLine[0].EndsWith($oldExecutable, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Already-running detection did not identify the exact owned fixture path/PID.'
+    # The fixture has a bounded lifetime. If it exits between extraction and
+    # detection, an installer without --no-launch can start the real application
+    # using the current user's profile. Keep that race test explicitly opt-in.
+    if ($AllowLiveApplicationLaunch) {
+        if ($fixture.HasExited) { throw 'Live fixture exited before the opt-in launch-suppression check.' }
+        $runningTarget = Invoke-FreshInstall 'running-install' -AllowLaunch
+        $runningLog = Assert-ReadyLog $runningTarget 'skipped-running'
+        $runningLine = @($runningLog -split '\r?\n' | Where-Object {
+            $_ -match ('^Running: PID ' + $fixture.Id + ' ')
+        })
+        if ($runningLine.Count -ne 1 -or -not $runningLine[0].EndsWith($oldExecutable, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Already-running detection did not identify the exact owned fixture path/PID.'
+        }
+        $launchCheck = 'PASS: a verified live helper suppresses automatic launch without being stopped.'
+    } else {
+        $runningTarget = Invoke-FreshInstall 'running-fixture-no-launch'
+        [void](Assert-ReadyLog $runningTarget 'skipped-no-launch')
+        $launchCheck = 'SKIP: automatic-launch suppression requires -AllowLiveApplicationLaunch; fixture loss can start a real app using the current user profile.'
     }
 
     foreach ($label in @('repeat-1', 'repeat-2')) {
@@ -285,7 +295,7 @@ try {
     Write-Host "PASS: six same-version installations use unique directories; all $($expected.Count) file hashes match in each."
     Write-Host "PASS: live old installation, locked first-copy $lockLibraryName and existing settings remain unchanged."
     Write-Host 'PASS: two concurrent installations preserve both prior copies and create separate complete directories.'
-    Write-Host 'PASS: an already-running verified workspace helper suppresses automatic launch without being stopped.'
+    Write-Host $launchCheck
 
     # Explicit in-place diagnostics retain the negative test. --extract-to must
     # imply no-launch, and the error must identify the DLL from the user's report.
@@ -323,7 +333,7 @@ try {
         "PASS: six fresh same-version copies each match $($expected.Count) package SHA256 hashes."
         'PASS: two concurrent installers create different complete directories.'
         'PASS: locked old/first-version files and existing settings remain unchanged.'
-        'PASS: a verified live helper causes skipped-running; no user application is stopped.'
+        $launchCheck
         "PASS: explicit in-place $lockLibraryName lock reports Windows 32; unlocked repair succeeds."
         'PASS: mutually exclusive --install-root/--extract-to options are rejected.'
         'PASS: all built-in modules load in every new copy with a clean Qt environment; panels stay hidden.'

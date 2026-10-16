@@ -1,4 +1,6 @@
 #include "PanelWindow.h"
+#include "ui/Strings.h"
+#include "ui/ScreenGeometry.h"
 
 #include "platform/windows/WindowBehavior.h"
 #include "core/WidgetHostModel.h"
@@ -32,6 +34,8 @@ PanelWindow::PanelWindow(QWindow* parent)
     setResizeMode(QQuickView::SizeRootObjectToView);
     setTitle(QStringLiteral("w11widget"));
     m_widgetHost = new WidgetHostModel(this);
+    rootContext()->setContextProperty(QStringLiteral("I18n"), new Strings(this));
+    rootContext()->setContextProperty(QStringLiteral("Screens"), new ScreenGeometry(this));
     rootContext()->setContextProperty(QStringLiteral("widgetHostModel"), m_widgetHost);
 }
 

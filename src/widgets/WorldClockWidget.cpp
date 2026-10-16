@@ -102,7 +102,6 @@ bool WorldClockWidget::initialize(const QJsonObject& settings, QString& error)
         initialized_ = false;
         return false;
     }
-    refreshNow();
     return true;
 }
 
@@ -123,7 +122,8 @@ bool WorldClockWidget::updateSettings(const QJsonObject& settings, QString& erro
         emit showDateChanged();
     }
     clockReadings_ = std::move(nextReadings);
-    readings_ = readingsAt(now);
+    readingTime_ = now;
+    legacyReadings_.reset();
     emit clockChanged();
     return true;
 }
@@ -179,6 +179,14 @@ WorldClockReadings WorldClockWidget::readingsAt(const QDateTime& utc)
     };
 }
 
+const WorldClockReadings& WorldClockWidget::legacyReadings() const
+{
+    // Older consumers can still read the former three-zone properties; current
+    // single-zone widgets pay for those conversions only when requested.
+    if (!legacyReadings_) legacyReadings_ = readingTime_.isValid() ? readingsAt(readingTime_) : WorldClockReadings{};
+    return *legacyReadings_;
+}
+
 bool WorldClockWidget::usesDetailPopupForWidth(int widthDip)
 {
     return widthDip < CompactWidthDip;
@@ -191,7 +199,8 @@ void WorldClockWidget::refreshNow()
     for (auto& reading : clockReadings_) {
         reading = readingAt(now, QTimeZone(reading.zoneId.toLatin1()));
     }
-    readings_ = readingsAt(now);
+    readingTime_ = now;
+    legacyReadings_.reset();
     emit clockChanged();
 }
 

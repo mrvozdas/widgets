@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="/i18n">
+    <file alias="tr.json">../../locales/tr.json</file>
+  </qresource>
+</RCC>

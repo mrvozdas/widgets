@@ -1,13 +1,19 @@
+#include "ui/Strings.h"
+
 #include "app/ApplicationController.h"
 #include "core/VisibilityPolicy.h"
 #include "core/WidgetHostModel.h"
 #include "ui/WidgetSettingsDialog.h"
+#include "ui/FluentStyle.h"
+#include "ui/PlacementPreview.h"
 
 #include <QApplication>
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -16,6 +22,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSystemTrayIcon>
@@ -100,14 +107,16 @@ bool ApplicationController::start(QString& error, bool interactive, StartupMode 
         const auto result = settingsStore_->load();
         loaded = result.settings;
         loadMessage = result.ok ?
-            (result.missing ? QStringLiteral("Değişiklikler otomatik kaydedilecek.") :
-                              QStringLiteral("Kayıtlı ayarlar yüklendi.")) :
-            QStringLiteral("Ayar dosyası okunamadı; varsayılanlar kullanılıyor: ") + result.error;
+            (result.missing ? uiText("ui.degisiklikler_otomatik_kaydedilecek") :
+                              uiText("ui.kayitli_ayarlar_yuklendi")) :
+            uiText("ui.ayar_dosyasi_okunamadi_varsayilanlar_kullaniliyor") + result.error;
     }
 
     safetyTimer_ = new QTimer(this);
     safetyTimer_->setObjectName(QStringLiteral("safetyWatchdog"));
-    safetyTimer_->setInterval(1000);
+    // Native shell/window events are primary; this only repairs missed notifications.
+    safetyTimer_->setTimerType(Qt::VeryCoarseTimer);
+    safetyTimer_->setInterval(5000);
     connect(safetyTimer_, &QTimer::timeout, this, &ApplicationController::reevaluateVisibility);
     environmentTimer_ = new QTimer(this);
     environmentTimer_->setSingleShot(true);
@@ -136,7 +145,7 @@ bool ApplicationController::start(QString& error, bool interactive, StartupMode 
     connect(&panel_, &PanelWindow::powerStateChanged, this, &ApplicationController::handlePowerState);
     connect(&panel_, &PanelWindow::shellRecreated, this, &ApplicationController::handleShellRecreation);
     connect(&panel_, &PanelWindow::visibilityMaintenanceFailed, this, [this](const QString& error) {
-        setStatus(QStringLiteral("Panel görünürlük koruması: ") + error, true);
+        setStatus(uiText("ui.panel_gorunurluk_korumasi") + error, true);
     });
     connect(&panel_, &QWindow::visibleChanged, this, [this](bool visible) {
         if (!visible && requestedVisible_) environmentTimer_->start(0);
@@ -175,28 +184,102 @@ bool ApplicationController::start(QString& error, bool interactive, StartupMode 
 void ApplicationController::createControls() {
     controls_ = std::make_unique<QDialog>();
     controls_->setObjectName(QStringLiteral("panelControls"));
-    controls_->setWindowTitle(QStringLiteral("w11widget %1 — Panel kontrolü")
+    controls_->setWindowTitle(uiText("ui.w11widget_1_ayarlar")
                                  .arg(QCoreApplication::applicationVersion()));
-    controls_->setMinimumWidth(520);
+    controls_->setMinimumSize(880, 620);
+    controls_->resize(980, 720);
+    applyFluentStyle(controls_.get());
     auto* rootLayout = new QVBoxLayout(controls_.get());
+    rootLayout->setContentsMargins(20, 20, 20, 16);
+    rootLayout->setSpacing(14);
+    auto* content = new QHBoxLayout;
+    content->setSpacing(24);
+    rootLayout->addLayout(content, 1);
+
+    auto* navigation = new QWidget(controls_.get());
+    navigation->setFixedWidth(170);
+    auto* navigationLayout = new QVBoxLayout(navigation);
+    navigationLayout->setContentsMargins(0, 0, 0, 0);
+    navigationLayout->setSpacing(6);
+    auto* brand = new QLabel(QStringLiteral("w11widget"), navigation);
+    brand->setProperty("heading", true);
+    navigationLayout->addWidget(brand);
+    auto* version = new QLabel(QCoreApplication::applicationVersion(), navigation);
+    version->setProperty("muted", true);
+    navigationLayout->addWidget(version);
+    navigationLayout->addSpacing(22);
+    auto* navigationGroup = new QButtonGroup(navigation);
+    const auto addNavigation = [&](const QString& text, const QString& name) {
+        auto* button = new QPushButton(text, navigation);
+        button->setObjectName(name);
+        button->setProperty("nav", true);
+        button->setCheckable(true);
+        navigationGroup->addButton(button);
+        navigationLayout->addWidget(button);
+        return button;
+    };
+    widgetNavigation_ = addNavigation(uiText("ui.widgetlar"), QStringLiteral("manageWidgets"));
+    layoutNavigation_ = addNavigation(uiText("ui.yerlesim"), QStringLiteral("layoutNavigation"));
+    auto* appearanceNavigation = addNavigation(uiText("ui.gorunum"), QStringLiteral("appearanceNavigation"));
+    layoutNavigation_->setChecked(true);
+    navigationLayout->addStretch();
+    auto* navigationHint = new QLabel(uiText("ui.gorev_cubugunda_kucuk_bir_alan_ihtiyacin_olan_bilgiler"), navigation);
+    navigationHint->setWordWrap(true);
+    navigationLayout->addWidget(navigationHint);
+    content->addWidget(navigation);
+
     controlPages_ = new QStackedWidget(controls_.get());
     controlPages_->setObjectName(QStringLiteral("controlPages"));
+    content->addWidget(controlPages_, 1);
     panelControlsPage_ = new QWidget(controlPages_);
     panelControlsPage_->setObjectName(QStringLiteral("panelControlsPage"));
     controlPages_->addWidget(panelControlsPage_);
-    rootLayout->addWidget(controlPages_);
-    auto* layout = new QVBoxLayout(panelControlsPage_);
-    auto* intro = new QLabel(QStringLiteral("1. Boş bölgeyi seç.  2. Gerekirse kutuyu yeniden işaretle.  3. Göster'e bas."));
+    auto* pageLayout = new QVBoxLayout(panelControlsPage_);
+    pageLayout->setContentsMargins(0, 0, 0, 0);
+    auto* placementScroll = new QScrollArea(panelControlsPage_);
+    placementScroll->setWidgetResizable(true);
+    auto* placementContent = new QWidget(placementScroll);
+    placementScroll->setWidget(placementContent);
+    pageLayout->addWidget(placementScroll);
+    auto* layout = new QVBoxLayout(placementContent);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
+    auto* title = new QLabel(uiText("ui.yerlesim"), panelControlsPage_);
+    title->setProperty("heading", true);
+    layout->addWidget(title);
+    auto* intro = new QLabel(uiText("ui.panelin_ekranini_ve_gorev_cubugundaki_yerini_sec"), panelControlsPage_);
     intro->setWordWrap(true);
     layout->addWidget(intro);
-    auto* form = new QFormLayout;
+    placementCanvas_ = new PlacementPreview(panelControlsPage_);
+    placementCanvas_->setAccessibleName(uiText("ui.secilen_panel_konumunun_gorev_cubuguna_gore_onizlemesi"));
+    layout->addWidget(placementCanvas_);
+    preview_ = new QLabel(panelControlsPage_);
+    preview_->setObjectName(QStringLiteral("placementPreview"));
+    preview_->setWordWrap(true);
+    layout->addWidget(preview_);
 
+    auto* presets = new QHBoxLayout;
+    auto* compactLeft = new QPushButton(uiText("ui.sola_yerlestir"), panelControlsPage_);
+    compactLeft->setObjectName(QStringLiteral("placementPresetLeft"));
+    auto* compactRight = new QPushButton(uiText("ui.saga_yerlestir"), panelControlsPage_);
+    compactRight->setObjectName(QStringLiteral("placementPresetRight"));
+    presets->addWidget(compactLeft);
+    presets->addWidget(compactRight);
+    presets->addStretch();
+    layout->addLayout(presets);
+
+    auto* placementCard = new QFrame(panelControlsPage_);
+    placementCard->setProperty("card", true);
+    auto* form = new QFormLayout(placementCard);
+    form->setContentsMargins(16, 12, 16, 12);
+    form->setSpacing(10);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     monitor_ = new QComboBox;
     monitor_->setObjectName(QStringLiteral("panelMonitor"));
-    monitor_->addItem(QStringLiteral("Birincil ekran"), QStringLiteral("primary"));
+    monitor_->addItem(uiText("ui.birincil_ekran"), QStringLiteral("primary"));
     side_ = new QComboBox;
     side_->setObjectName(QStringLiteral("panelSide"));
-    side_->addItems({QStringLiteral("Sol"), QStringLiteral("Sağ")});
+    side_->addItems({uiText("ui.sol"), uiText("ui.sag")});
     width_ = new QSpinBox;
     width_->setObjectName(QStringLiteral("panelWidth"));
     width_->setRange(80, 640);
@@ -207,55 +290,93 @@ void ApplicationController::createControls() {
     offset_->setRange(0, 20000);
     offset_->setValue(150);
     offset_->setSuffix(QStringLiteral(" px"));
+    form->addRow(QStringLiteral("&Ekran"), monitor_);
+    form->addRow(QStringLiteral("&Hizalama"), side_);
+    form->addRow(uiText("ui.genislik"), width_);
+    form->addRow(uiText("ui.kenar_boslugu"), offset_);
+    layout->addWidget(placementCard);
+    auto* placementHint = new QLabel(uiText("ui.onizleme_simgelerin_yerini_algilamaz_panelin_baslat_uygu"), panelControlsPage_);
+    placementHint->setWordWrap(true);
+    layout->addWidget(placementHint);
+    confirmed_ = new QCheckBox(uiText("ui.bu_bolge_bos_baslat_uygulama_simgeleri_veya_saati_kapatm"));
+    confirmed_->setObjectName(QStringLiteral("confirmRegion"));
+    layout->addWidget(confirmed_);
+    layout->addStretch();
+
+    appearancePage_ = new QWidget(controlPages_);
+    appearancePage_->setObjectName(QStringLiteral("appearancePage"));
+    controlPages_->addWidget(appearancePage_);
+    auto* appearanceLayout = new QVBoxLayout(appearancePage_);
+    appearanceLayout->setContentsMargins(0, 0, 0, 0);
+    appearanceLayout->setSpacing(14);
+    auto* appearanceTitle = new QLabel(uiText("ui.gorunum"), appearancePage_);
+    appearanceTitle->setProperty("heading", true);
+    appearanceLayout->addWidget(appearanceTitle);
+    auto* appearanceIntro = new QLabel(uiText("ui.ayarlar_windowsun_acik_veya_koyu_temasini_izler_panelin"), appearancePage_);
+    appearanceIntro->setWordWrap(true);
+    appearanceLayout->addWidget(appearanceIntro);
+    auto* appearanceCard = new QFrame(appearancePage_);
+    appearanceCard->setProperty("card", true);
+    auto* appearanceForm = new QFormLayout(appearanceCard);
+    appearanceForm->setContentsMargins(16, 16, 16, 16);
     opacity_ = new QSpinBox;
     opacity_->setObjectName(QStringLiteral("panelOpacity"));
     opacity_->setRange(25, 100);
     opacity_->setValue(95);
     opacity_->setSuffix(QStringLiteral("%"));
-    form->addRow(QStringLiteral("&Ekran:"), monitor_);
-    form->addRow(QStringLiteral("&Taraf:"), side_);
-    form->addRow(QStringLiteral("&Genişlik:"), width_);
-    form->addRow(QStringLiteral("&Kenardan uzaklık:"), offset_);
-    form->addRow(QStringLiteral("&Opaklık:"), opacity_);
-    layout->addLayout(form);
-
-    auto* visibilityInfo = new QLabel(QStringLiteral("Panel, Göster'den sonra görünür kalır. Kapatmak için Gizle veya Çıkış'ı kullan."));
+    appearanceForm->addRow(uiText("ui.panel_opakligi"), opacity_);
+    appearanceLayout->addWidget(appearanceCard);
+    auto* visibilityInfo = new QLabel(uiText("ui.panel_gosterden_sonra_gorunur_kalir_gizle_paneli_kapatir"), appearancePage_);
     visibilityInfo->setWordWrap(true);
-    layout->addWidget(visibilityInfo);
-    preview_ = new QLabel;
-    preview_->setObjectName(QStringLiteral("placementPreview"));
-    preview_->setWordWrap(true);
-    preview_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(preview_);
-    confirmed_ = new QCheckBox(QStringLiteral("Bu bölge boş; Başlat, uygulama simgeleri veya saati kapatmıyor."));
-    confirmed_->setObjectName(QStringLiteral("confirmRegion"));
-    layout->addWidget(confirmed_);
+    appearanceLayout->addWidget(visibilityInfo);
+    appearanceLayout->addStretch();
+    auto* maintenanceTitle = new QLabel(uiText("ui.bakim"), appearancePage_);
+    maintenanceTitle->setProperty("section", true);
+    appearanceLayout->addWidget(maintenanceTitle);
+    auto* maintenance = new QHBoxLayout;
+    auto* diagnostics = new QPushButton(uiText("ui.tanilama"));
+    auto* reset = new QPushButton(uiText("ui.varsayilanlara_don"));
+    reset->setObjectName(QStringLiteral("resetPreferences"));
+    maintenance->addWidget(diagnostics);
+    maintenance->addWidget(reset);
+    maintenance->addStretch();
+    appearanceLayout->addLayout(maintenance);
+
     status_ = new QLabel;
     status_->setObjectName(QStringLiteral("panelStatus"));
     status_->setWordWrap(true);
-    layout->addWidget(status_);
+    rootLayout->addWidget(status_);
+    auto* footer = new QHBoxLayout;
     settingsStatus_ = new QLabel;
     settingsStatus_->setObjectName(QStringLiteral("settingsStatus"));
     settingsStatus_->setWordWrap(true);
-    layout->addWidget(settingsStatus_);
-
-    auto* widgets = new QPushButton(QStringLiteral("&Widget'ları düzenle…"));
-    widgets->setObjectName(QStringLiteral("manageWidgets"));
-    layout->addWidget(widgets);
-    connect(widgets, &QPushButton::clicked, this, &ApplicationController::showWidgetSettings);
-
-    auto* buttons = new QHBoxLayout;
-    show_ = new QPushButton(QStringLiteral("&Göster"));
+    footer->addWidget(settingsStatus_, 1);
+    show_ = new QPushButton(uiText("ui.goster"));
     show_->setObjectName(QStringLiteral("showPanel"));
-    show_->setDefault(true);
-    auto* hide = new QPushButton(QStringLiteral("G&izle"));
+    show_->setProperty("primary", true);
+    show_->setAutoDefault(false);
+    auto* hide = new QPushButton(uiText("ui.g_izle"));
     hide->setObjectName(QStringLiteral("hidePanel"));
-    auto* diagnostics = new QPushButton(QStringLiteral("&Tanılama"));
-    auto* reset = new QPushButton(QStringLiteral("&Sıfırla"));
-    reset->setObjectName(QStringLiteral("resetPreferences"));
-    auto* exit = new QPushButton(QStringLiteral("&Çıkış"));
-    for (auto* button : {show_, hide, diagnostics, reset, exit}) buttons->addWidget(button);
-    layout->addLayout(buttons);
+    auto* exit = new QPushButton(uiText("ui.cikis"));
+    for (auto* button : {hide, exit, show_}) footer->addWidget(button);
+    rootLayout->addLayout(footer);
+    connect(widgetNavigation_, &QPushButton::clicked, this, &ApplicationController::showWidgetSettings);
+    connect(layoutNavigation_, &QPushButton::clicked, this, &ApplicationController::showControls);
+    connect(appearanceNavigation, &QPushButton::clicked, this, [this] {
+        controlPages_->setCurrentWidget(appearancePage_);
+    });
+    const auto applyPreset = [this](int side) {
+        const QSignalBlocker blockSide(side_);
+        const QSignalBlocker blockWidth(width_);
+        const QSignalBlocker blockOffset(offset_);
+        side_->setCurrentIndex(side);
+        width_->setValue(330);
+        offset_->setValue(150);
+        invalidatePlacement();
+        if (settingsStore_) { preferencesDirty_ = true; saveTimer_->start(); }
+    };
+    connect(compactLeft, &QPushButton::clicked, this, [applyPreset] { applyPreset(0); });
+    connect(compactRight, &QPushButton::clicked, this, [applyPreset] { applyPreset(1); });
     connect(show_, &QPushButton::clicked, this, &ApplicationController::showPanel);
     connect(hide, &QPushButton::clicked, this, &ApplicationController::hidePanel);
     connect(diagnostics, &QPushButton::clicked, this, &ApplicationController::showDiagnostics);
@@ -291,24 +412,26 @@ void ApplicationController::createControls() {
         }
         updateReadinessStatus();
     });
+    // Enter commits the focused editor instead of unexpectedly showing or hiding the panel.
+    for (auto* button : controls_->findChildren<QPushButton*>()) button->setAutoDefault(false);
 }
 
 void ApplicationController::populateMonitors() {
     const QString selected = monitor_->currentData().toString();
     const QSignalBlocker blocker(monitor_);
     monitor_->clear();
-    monitor_->addItem(QStringLiteral("Birincil ekran"), QStringLiteral("primary"));
+    monitor_->addItem(uiText("ui.birincil_ekran"), QStringLiteral("primary"));
     std::string error;
     for (const auto& monitor : services_.monitors(error)) {
         const QString device = QString::fromStdWString(monitor.device);
-        const QString label = QStringLiteral("%1 — %2×%3%4").arg(device)
+        const QString label = uiText("ui.1_2_3_4").arg(device)
             .arg(monitor.bounds.width()).arg(monitor.bounds.height())
             .arg(monitor.primary ? QStringLiteral(" (birincil)") : QString());
         monitor_->addItem(label, device);
     }
     int index = monitor_->findData(selected);
     if (index < 0 && !selected.isEmpty()) {
-        monitor_->addItem(selected + QStringLiteral(" (bağlı değil)"), selected);
+        monitor_->addItem(selected + uiText("ui.bagli_degil"), selected);
         index = monitor_->count() - 1;
     }
     monitor_->setCurrentIndex(index < 0 ? 0 : index);
@@ -319,7 +442,7 @@ void ApplicationController::applyPreferences(const PanelSettings& settings) {
     populateMonitors();
     int index = monitor_->findData(settings.monitor);
     if (index < 0) {
-        monitor_->addItem(settings.monitor + QStringLiteral(" (bağlı değil)"), settings.monitor);
+        monitor_->addItem(settings.monitor + uiText("ui.bagli_degil"), settings.monitor);
         index = monitor_->count() - 1;
     }
     monitor_->setCurrentIndex(index);
@@ -330,7 +453,7 @@ void ApplicationController::applyPreferences(const PanelSettings& settings) {
     panel_.setOpacity(opacity_->value() / 100.0);
     QString widgetError;
     if (!panel_.widgetHost()->setConfiguration(settings.widgets, widgetError)) {
-        setStatus(QStringLiteral("Widget ayarları uygulanamadı: ") + widgetError, true);
+        setStatus(uiText("ui.widget_ayarlari_uygulanamadi") + widgetError, true);
     }
     applyingPreferences_ = false;
 }
@@ -353,8 +476,8 @@ void ApplicationController::savePreferences() {
     QString error;
     const bool saved = settingsStore_->save(preferences(), error);
     preferencesDirty_ = !saved;
-    settingsStatus_->setText(saved ? QStringLiteral("Ayarlar kaydedildi.") :
-        QStringLiteral("Ayarlar kaydedilemedi: ") + error);
+    settingsStatus_->setText(saved ? uiText("ui.ayarlar_kaydedildi") :
+        uiText("ui.ayarlar_kaydedilemedi") + error);
     settingsStatus_->setToolTip(settingsStore_->filePath());
 }
 
@@ -365,7 +488,7 @@ void ApplicationController::resetPreferences() {
     refreshPreview();
     preferencesDirty_ = true;
     savePreferences();
-    setStatus(QStringLiteral("Varsayılan ayarlara dönüldü. Bölgeyi yeniden onayla."));
+    setStatus(uiText("ui.varsayilan_ayarlara_donuldu_bolgeyi_yeniden_onayla"));
 }
 
 void ApplicationController::connectScreen(QScreen* screen) {
@@ -377,15 +500,15 @@ void ApplicationController::connectScreen(QScreen* screen) {
 void ApplicationController::createTray() {
     if (!services_.trayAvailable()) return;
     trayMenu_ = std::make_unique<QMenu>();
-    trayMenu_->addAction(QStringLiteral("Paneli göster"), this, &ApplicationController::showPanel);
-    trayMenu_->addAction(QStringLiteral("Paneli gizle"), this, &ApplicationController::hidePanel);
+    trayMenu_->addAction(uiText("ui.paneli_goster"), this, &ApplicationController::showPanel);
+    trayMenu_->addAction(uiText("ui.paneli_gizle"), this, &ApplicationController::hidePanel);
     trayMenu_->addAction(QStringLiteral("Ayarlar…"), this, &ApplicationController::showControls);
-    trayMenu_->addAction(QStringLiteral("Widget'ları düzenle…"), this, &ApplicationController::showWidgetSettings);
-    trayMenu_->addAction(QStringLiteral("Tanılama…"), this, &ApplicationController::showDiagnostics);
+    trayMenu_->addAction(uiText("ui.widget_lari_duzenle"), this, &ApplicationController::showWidgetSettings);
+    trayMenu_->addAction(uiText("ui.tanilama_2"), this, &ApplicationController::showDiagnostics);
     trayMenu_->addSeparator();
-    trayMenu_->addAction(QStringLiteral("Çıkış"), qApp, &QCoreApplication::quit);
+    trayMenu_->addAction(uiText("ui.cikis_2"), qApp, &QCoreApplication::quit);
     tray_ = std::make_unique<QSystemTrayIcon>(appIcon());
-    tray_->setToolTip(QStringLiteral("w11widget — Panel kontrolü"));
+    tray_->setToolTip(uiText("ui.w11widget_panel_kontrolu"));
     tray_->setContextMenu(trayMenu_.get());
     connect(tray_.get(), &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
         if (reason == QSystemTrayIcon::DoubleClick || reason == QSystemTrayIcon::Trigger) showControls();
@@ -413,9 +536,10 @@ void ApplicationController::refreshPreview() {
     previewError_.clear();
     show_->setEnabled(true);
     if (!snapshot) {
+        placementCanvas_->clearPlacement();
         previewSnapshot_.reset();
         if (!requestedVisible_) clearConfirmation();
-        previewError_ = QStringLiteral("Görev çubuğu okunamadı: ") + QString::fromStdString(error);
+        previewError_ = uiText("ui.gorev_cubugu_okunamadi") + QString::fromStdString(error);
         preview_->setText(previewError_);
         show_->setToolTip(previewError_);
         return;
@@ -429,19 +553,23 @@ void ApplicationController::refreshPreview() {
     // Auto-hide is a shell preference; the panel's visibility is independent.
     const auto result = calculatePlacement(snapshot->bounds, snapshot->dpi, snapshot->edge, false, candidate);
     if (!result.ok) {
+        placementCanvas_->clearPlacement();
         if (!requestedVisible_) clearConfirmation();
-        previewError_ = QStringLiteral("Bu konum kullanılamıyor: ") + QString::fromStdString(result.error);
+        previewError_ = uiText("ui.bu_konum_kullanilamiyor") + QString::fromStdString(result.error);
         preview_->setText(previewError_);
         show_->setToolTip(previewError_);
         return;
     }
     const auto& rect = result.bounds;
-    preview_->setText(QStringLiteral("Seçilen bölge: x=%1, y=%2, genişlik=%3, yükseklik=%4 piksel\nÖlçek: %5%%6")
+    placementCanvas_->setPlacement(snapshot->bounds, rect);
+    preview_->setText(uiText("ui.1_kenardan_2_px_3_px_genislik")
+        .arg(side_->currentText()).arg(offset_->value()).arg(width_->value()));
+    preview_->setToolTip(uiText("ui.secilen_bolge_x_1_y_2_genislik_3_yukseklik_4_piksel_olce")
         .arg(rect.left).arg(rect.top).arg(rect.width()).arg(rect.height())
         .arg(snapshot->dpi * 100.0 / 96.0)
-        .arg(snapshot->autoHide ? QStringLiteral(" — görev çubuğu otomatik gizleniyor") : QString()));
-    show_->setToolTip(confirmed_->isChecked() ? QStringLiteral("Paneli seçilen bölgede göster.") :
-        QStringLiteral("Önce 'Bu bölge boş' kutusunu işaretleyerek konumu onayla."));
+        .arg(snapshot->autoHide ? uiText("ui.gorev_cubugu_otomatik_gizleniyor") : QString()));
+    show_->setToolTip(confirmed_->isChecked() ? uiText("ui.paneli_secilen_bolgede_goster") :
+        uiText("ui.once_bu_bolge_bos_kutusunu_isaretleyerek_konumu_onayla"));
 }
 
 void ApplicationController::clearConfirmation() {
@@ -452,24 +580,24 @@ void ApplicationController::clearConfirmation() {
 
 void ApplicationController::setStatus(const QString& text, bool error) {
     status_->setText(text);
-    status_->setStyleSheet(error ? QStringLiteral("color: #a52b26;") : QString());
+    status_->setStyleSheet(error ? uiText("ui.color_a52b26") : QString());
 }
 
 void ApplicationController::updateReadinessStatus() {
     if (!previewError_.isEmpty()) setStatus(previewError_, true);
     else if (!confirmed_->isChecked())
-        setStatus(QStringLiteral("Önce 'Bu bölge boş' kutusunu işaretle; ardından Göster'e bas."));
+        setStatus(uiText("ui.once_bu_bolge_bos_kutusunu_isaretle_ardindan_goster_e_ba"));
     else if (displayed_)
-        setStatus(QStringLiteral("Panel gösteriliyor. Gizle veya Çıkış ile kapatabilirsin."));
-    else setStatus(QStringLiteral("Konum onaylandı. Paneli açmak için Göster'e bas."));
+        setStatus(uiText("ui.panel_gosteriliyor_gizle_veya_cikis_ile_kapatabilirsin"));
+    else setStatus(uiText("ui.konum_onaylandi_paneli_acmak_icin_goster_e_bas"));
 }
 
 void ApplicationController::invalidatePlacement() {
     clearConfirmation();
     refreshPreview();
     setStatus(previewError_.isEmpty() ?
-        (requestedVisible_ ? QStringLiteral("Panel eski konumunda görünür kalıyor. Yeni konum için bölgeyi onaylayıp Göster'e bas.") :
-                            QStringLiteral("Konum değişti. 'Bu bölge boş' kutusunu yeniden işaretle.")) : previewError_,
+        (requestedVisible_ ? uiText("ui.panel_eski_konumunda_gorunur_kaliyor_yeni_konum_icin_bol") :
+                            uiText("ui.konum_degisti_bu_bolge_bos_kutusunu_yeniden_isaretle")) : previewError_,
         !previewError_.isEmpty());
 }
 
@@ -491,7 +619,7 @@ void ApplicationController::showPanel() {
     }
     if (!approved || !previewSnapshot_ || !sameGeometry(*approved, *previewSnapshot_) ||
         !confirmed_->isChecked()) {
-        setStatus(QStringLiteral("Paneli açmak için önce 'Bu bölge boş' kutusunu işaretleyerek konumu onayla."), true);
+        setStatus(uiText("ui.paneli_acmak_icin_once_bu_bolge_bos_kutusunu_isaretleyer"), true);
         return;
     }
     const auto& snapshot = *previewSnapshot_;
@@ -508,7 +636,7 @@ void ApplicationController::showPanel() {
     if (!shown) {
         requestedVisible_ = previouslyRequested;
         if (!requestedVisible_) safetyTimer_->stop();
-        setStatus(QStringLiteral("Panel açılamadı: ") + error, true);
+        setStatus(uiText("ui.panel_acilamadi") + error, true);
         return;
     }
     retainedBounds_ = result.bounds;
@@ -517,11 +645,11 @@ void ApplicationController::showPanel() {
     panel_.widgetHost()->setRunning(true);
     safetyTimer_->start();
     if (interactive_ && !panel_.watchTaskbar(reinterpret_cast<WId>(snapshot.hwnd), error)) {
-        setStatus(QStringLiteral("Panel gösteriliyor; anlık sıralama takibi kurulamadı: ") + error, true);
+        setStatus(uiText("ui.panel_gosteriliyor_anlik_siralama_takibi_kurulamadi") + error, true);
         controls_->hide();
         return;
     }
-    setStatus(QStringLiteral("Panel gösteriliyor. Gizle veya Çıkış ile kapatabilirsin."));
+    setStatus(uiText("ui.panel_gosteriliyor_gizle_veya_cikis_ile_kapatabilirsin"));
     if (interactive_) controls_->hide();
 }
 
@@ -554,18 +682,18 @@ void ApplicationController::reevaluateVisibility() {
     }
     QString error;
     if (!services_.retainPanel(candidateBounds, error)) {
-        setStatus(QStringLiteral("Panelin görünürlüğü yenilenemedi: ") + error, true);
+        setStatus(uiText("ui.panelin_gorunurlugu_yenilenemedi") + error, true);
         return;
     }
     if (!requestedVisible_) return;
     retainedBounds_ = candidateBounds;
     displayed_ = true;
     if (!observerError.isEmpty()) {
-        setStatus(QStringLiteral("Panel gösteriliyor; anlık sıralama takibi yenilenemedi: ") + observerError, true);
+        setStatus(uiText("ui.panel_gosteriliyor_anlik_siralama_takibi_yenilenemedi") + observerError, true);
         return;
     }
-    setStatus(snapshot ? QStringLiteral("Panel gösteriliyor. Gizle veya Çıkış ile kapatabilirsin.") :
-        QStringLiteral("Panel son doğrulanan konumunda tutuluyor. Görev çubuğu okunamadı: ") +
+    setStatus(snapshot ? uiText("ui.panel_gosteriliyor_gizle_veya_cikis_ile_kapatabilirsin") :
+        uiText("ui.panel_son_dogrulanan_konumunda_tutuluyor_gorev_cubugu_ok") +
             QString::fromStdString(probeError), !snapshot.has_value());
 }
 
@@ -578,7 +706,7 @@ void ApplicationController::hidePanel() {
     requestedVisible_ = false;
     if (safetyTimer_) safetyTimer_->stop();
     hideTemporarily();
-    if (status_) setStatus(QStringLiteral("Panel gizli."));
+    if (status_) setStatus(uiText("ui.panel_gizli"));
 }
 
 void ApplicationController::handleEnvironmentChange() {
@@ -606,6 +734,7 @@ void ApplicationController::activatePanel() {
 void ApplicationController::showControls() {
     refreshPreview();
     controlPages_->setCurrentWidget(panelControlsPage_);
+    layoutNavigation_->setChecked(true);
     if (!interactive_) return;
     controls_->setAttribute(Qt::WA_ShowWithoutActivating, false);
     controls_->showNormal();
@@ -621,6 +750,7 @@ void ApplicationController::showWidgetSettings() {
                 this, &ApplicationController::showControls);
     }
     controlPages_->setCurrentWidget(widgetControls_.get());
+    widgetNavigation_->setChecked(true);
     if (!interactive_) return;
     controls_->setAttribute(Qt::WA_ShowWithoutActivating, false);
     controls_->showNormal();
@@ -633,8 +763,8 @@ void ApplicationController::showDiagnostics() {
     std::string error;
     const auto snapshot = probeTaskbar(error);
     QString text = snapshot ? QString::fromStdString(windows::describe(*snapshot)) :
-        QStringLiteral("Görev çubuğu okunamadı: ") + QString::fromStdString(error);
-    if (settingsStore_) text += QStringLiteral("\n\nAyar dosyası: ") + settingsStore_->filePath();
-    QMessageBox::information(controls_.get(), QStringLiteral("w11widget — Tanılama"), text);
+        uiText("ui.gorev_cubugu_okunamadi") + QString::fromStdString(error);
+    if (settingsStore_) text += uiText("ui.ayar_dosyasi") + settingsStore_->filePath();
+    QMessageBox::information(controls_.get(), uiText("ui.w11widget_tanilama"), text);
 }
 } // namespace w11widget

@@ -104,6 +104,7 @@ QVariant WidgetHostModel::data(const QModelIndex& index, int role) const
     case ViewModelRole: return QVariant::fromValue(entry.viewModel);
     case LifecycleStateRole: return entry.state;
     case ErrorMessageRole: return entry.error;
+    case ContentSizedRole: return descriptor && descriptor->contentSized;
     default: return {};
     }
 }
@@ -114,7 +115,7 @@ QHash<int, QByteArray> WidgetHostModel::roleNames() const
             {ModuleEnabledRole, "moduleEnabled"}, {ModuleVisibleRole, "moduleVisible"},
             {WidthDipRole, "widthDip"}, {ComponentSourceRole, "componentSource"},
             {ViewModelRole, "viewModel"}, {LifecycleStateRole, "lifecycleState"},
-            {ErrorMessageRole, "errorMessage"}};
+            {ErrorMessageRole, "errorMessage"}, {ContentSizedRole, "contentSized"}};
 }
 
 void WidgetHostModel::stopEntry(Entry& entry)
@@ -336,10 +337,41 @@ bool WidgetHostModel::setWidgetSettings(const QString& instanceId, const QJsonOb
     const int row = findInstance(instanceId, error);
     if (row < 0) return false;
     if (configuration_[row].settings == settings) return true;
-    const auto previous = configuration_[row];
+    auto& entry = *entries_[row];
+    auto validator = entry.module ? nullptr : registry_.create(configuration_[row].typeId, error);
+    IWidget* module = entry.module ? entry.module.get() : validator.get();
+    if (!module || !callModule(QStringLiteral("validateSettings"), [&] {
+            return module->validateSettings(settings, error);
+        }, error)) return false;
+
+    if (entry.module) {
+        if (!callModule(QStringLiteral("updateSettings"), [&] {
+                return entry.module->updateSettings(settings, error);
+            }, error)) {
+            // A module can fail after mutating its model. Restore the last saved
+            // settings before returning the failed edit to its caller.
+            QString rollbackError;
+            if (!callModule(QStringLiteral("restoreSettings"), [&] {
+                    return entry.module->updateSettings(configuration_[row].settings, rollbackError);
+                }, rollbackError)) {
+                failEntry(entry, error + QStringLiteral(" ") + rollbackError);
+                notifyEntry(row);
+            }
+            return false;
+        }
+    } else if (configuration_[row].enabled) {
+        Entry replacement;
+        replacement.configuration = configuration_[row];
+        replacement.configuration.settings = settings;
+        reconcile(replacement, nullptr);
+        if (!replacement.error.isEmpty()) {
+            error = replacement.error;
+            return false;
+        }
+        entry = std::move(replacement);
+    }
     configuration_[row].settings = settings;
     entries_[row]->configuration = configuration_[row];
-    reconcile(*entries_[row], &previous);
     notifyEntry(row);
     emit configurationChanged();
     return true;

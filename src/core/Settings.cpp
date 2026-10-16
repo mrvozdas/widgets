@@ -21,6 +21,7 @@ namespace w11widget {
 namespace {
 
 constexpr qsizetype MaximumWidgetSettingsBytes = 64 * 1024;
+constexpr qint64 MaximumSettingsFileBytes = 256 * 1024;
 
 bool validWidgetId(const QString& id) {
     if (id.isEmpty() || id.size() > 64) return false;
@@ -304,7 +305,14 @@ SettingsLoadResult SettingsStore::load() const {
     if (!file.open(QIODevice::ReadOnly)) {
         return invalidLoad(QStringLiteral("Ayar dosyası açılamadı: ") + file.errorString());
     }
-    const QByteArray bytes = file.readAll();
+    if (file.size() > MaximumSettingsFileBytes) {
+        return invalidLoad(QStringLiteral("Ayar dosyası 256 KiB sınırını aşıyor."));
+    }
+    // Bound the read too: another process may grow the file after size().
+    const QByteArray bytes = file.read(MaximumSettingsFileBytes + 1);
+    if (bytes.size() > MaximumSettingsFileBytes) {
+        return invalidLoad(QStringLiteral("Ayar dosyası 256 KiB sınırını aşıyor."));
+    }
     if (file.error() != QFileDevice::NoError) {
         return invalidLoad(QStringLiteral("Ayar dosyası okunamadı: ") + file.errorString());
     }
@@ -373,11 +381,6 @@ bool SettingsStore::save(const PanelSettings& settings, QString& error) const {
         error = QStringLiteral("Ayar dosyası yolu bir klasörü gösteriyor.");
         return false;
     }
-    if (!QDir().mkpath(info.absolutePath())) {
-        error = QStringLiteral("Ayar dosyasının klasörü oluşturulamadı.");
-        return false;
-    }
-
     const QJsonObject panel{
         {QStringLiteral("monitor"), settings.monitor},
         {QStringLiteral("side"), settings.side == PanelSide::Left ? QStringLiteral("left") : QStringLiteral("right")},
@@ -400,6 +403,14 @@ bool SettingsStore::save(const PanelSettings& settings, QString& error) const {
     const QJsonObject root{{QStringLiteral("schema_version"), 2}, {QStringLiteral("panel"), panel},
                            {QStringLiteral("widgets"), widgets}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (bytes.size() > MaximumSettingsFileBytes) {
+        error = QStringLiteral("Ayar dosyası 256 KiB sınırını aşıyor.");
+        return false;
+    }
+    if (!QDir().mkpath(info.absolutePath())) {
+        error = QStringLiteral("Ayar dosyasının klasörü oluşturulamadı.");
+        return false;
+    }
     QSaveFile file(filePath_);
     file.setDirectWriteFallback(false);
     if (!file.open(QIODevice::WriteOnly)) {

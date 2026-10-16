@@ -1,4 +1,5 @@
-﻿import QtQuick
+import QtQuick
+import QtQuick.Controls
 
 Rectangle {
     id: worldClock
@@ -24,12 +25,12 @@ Rectangle {
     clip: true
     Accessible.role: Accessible.Button
     Accessible.name: displayedName + " " + displayedTime
-    Accessible.description: "Saat ayrıntılarını göster"
+    Accessible.description: I18n.text("ui.saat_ayrintilarini_goster")
     Accessible.onPressAction: showDetails()
 
     function showDetails() {
         if (widgetModel && widgetModel.active)
-            widgetModel.showDetails()
+            details.openFor(worldClock)
     }
 
     TextMetrics {
@@ -94,5 +95,31 @@ Rectangle {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: worldClock.showDetails()
+    }
+    WidgetFlyout {
+        id: details
+        objectName: "worldClockFlyout"
+        heading: worldClock.displayedName
+        Label {
+            text: worldClock.reading.time
+            font.pixelSize: 36
+            font.weight: Font.DemiBold
+        }
+        Label {
+            width: parent.width
+            text: worldClock.widgetModel ? worldClock.widgetModel.details : ""
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+        }
+        Button {
+            text: I18n.text("ui.widget_ayarlari")
+            onClicked: { details.close(); worldClock.requestPanelSettings() }
+        }
+    }
+    Connections {
+        target: worldClock.widgetModel
+        function onActiveChanged() {
+            if (!worldClock.widgetModel.active) details.close()
+        }
     }
 }

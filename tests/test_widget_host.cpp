@@ -57,10 +57,14 @@ public:
         return true;
     }
 
-    bool updateSettings(const QJsonObject&, QString& error) override
+    bool updateSettings(const QJsonObject& settings, QString& error) override
     {
         error.clear();
         ++updated;
+        if (settings.value(QStringLiteral("fail_update")).toBool()) {
+            error = QStringLiteral("The fixture failed during update.");
+            return false;
+        }
         return true;
     }
 
@@ -147,6 +151,23 @@ void testLifecycleAndErrors()
           "settings updates are accepted by a running module");
     check(LifecycleWidget::updated == 1, "settings updates reach the initialized module");
 
+    QPointer<QObject> model = host.data(host.index(0), WidgetHostModel::ViewModelRole).value<QObject*>();
+    int configurationChanges = 0;
+    QObject::connect(&host, &WidgetHostModel::configurationChanged, [&] { ++configurationChanges; });
+    check(!host.setWidgetSettings(valid.instanceId, {{QStringLiteral("valid"), false}}, error) &&
+              !error.isEmpty() && host.configuration().front() == updated && configurationChanges == 0 &&
+              host.data(host.index(0), WidgetHostModel::ViewModelRole).value<QObject*>() == model &&
+              host.data(host.index(0), WidgetHostModel::LifecycleStateRole) == QStringLiteral("active"),
+          "rejected editor input preserves saved settings and the active model without a save signal");
+    check(!host.updateWidgetSettings(valid.instanceId, {{QStringLiteral("valid"), false}}).isEmpty(),
+          "QML receives the validation error instead of reporting a successful save");
+    check(!host.setWidgetSettings(valid.instanceId,
+              {{QStringLiteral("valid"), true}, {QStringLiteral("fail_update"), true}}, error) &&
+              !error.isEmpty() && host.configuration().front() == updated && configurationChanges == 0 &&
+              host.data(host.index(0), WidgetHostModel::ViewModelRole).value<QObject*>() == model &&
+              LifecycleWidget::updated == 3,
+          "a failed runtime update restores prior settings and reports failure without replacing the model");
+
     check(host.setVisible(valid.instanceId, false, error), "visible state can be disabled");
     check(LifecycleWidget::suspended == 1, "hiding a running module suspends it");
     check(host.setVisible(valid.instanceId, true, error), "visible state can be restored");
@@ -199,6 +220,14 @@ void testBuiltInCountdownSettings()
               !updated->settings.value(QStringLiteral("daily_repeat")).toBool() &&
               updated->settings.value(QStringLiteral("target_date")).toString() == QStringLiteral("2026-12-31"),
           "Countdown configuration retains target, repeat and one-shot date");
+    for (int row = 0; row < host.rowCount(); ++row) {
+        check(host.data(host.index(row), WidgetHostModel::ContentSizedRole).toBool(),
+              "clock and countdown descriptors expose content sizing without QML type checks");
+    }
+    QString error;
+    check(host.addWidget(QStringLiteral("focus-timer"), error) &&
+              host.data(host.index(host.rowCount() - 1), WidgetHostModel::ContentSizedRole).toBool(),
+          "the focus timer registers through the same content-sized module contract");
 }
 
 void testBuiltInIndependentClocks()

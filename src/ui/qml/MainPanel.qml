@@ -77,7 +77,8 @@ Rectangle {
                 required property string componentSource
                 required property var viewModel
                 required property string errorMessage
-                property bool fixedSize: typeId === "countdown" || typeId === "world-clock"
+                required property bool contentSized
+                property bool fixedSize: contentSized
                 readonly property real naturalWidth: fixedSize
                     ? Math.ceil(moduleLoader.item && moduleLoader.item.implicitWidth > 0
                                 ? moduleLoader.item.implicitWidth : 72)
@@ -137,9 +138,9 @@ Rectangle {
                         anchors.fill: parent
                         anchors.margins: 5
                         text: moduleSlot.errorMessage.length > 0
-                              ? moduleSlot.errorMessage : "Modül yüklenemedi"
+                              ? moduleSlot.errorMessage : I18n.text("ui.modul_yuklenemedi")
                         color: "#ffc7c0"
-                        font.family: "Segoe UI"
+                        font.family: "Segoe UI Variable"
                         font.pixelSize: 10
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
@@ -166,8 +167,8 @@ Rectangle {
         anchors.right: parent.right
         anchors.rightMargin: 4
         anchors.verticalCenter: parent.verticalCenter
-        width: 20
-        height: 20
+        width: 24
+        height: 24
         radius: 5
         color: settingsInteraction.pressed ? "#47515f"
                                           : settingsInteraction.containsMouse ? "#38424f" : "#2b323d"
@@ -175,7 +176,7 @@ Rectangle {
         border.color: "#596574"
         Accessible.role: Accessible.Button
         Accessible.name: "Ayarlar"
-        Accessible.description: "Widget ayarlarını aç"
+        Accessible.description: I18n.text("ui.widget_ayarlarini_ac")
         Accessible.onPressAction: panelSettingsButton.activate()
 
         function activate() { panel.settingsRequested() }
@@ -201,12 +202,12 @@ Rectangle {
         objectName: "panelEmptyLabel"
         anchors.centerIn: viewport
         visible: panel.visibleModuleCount === 0
-        text: "Modül yok · Modüller bölümünden ekleyebilirsin"
+        text: I18n.text("ui.modul_yok_moduller_bolumunden_ekleyebilirsin")
         width: Math.max(0, viewport.width - 8)
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         color: "#bfc7d1"
-        font.family: "Segoe UI"
+        font.family: "Segoe UI Variable"
         font.pixelSize: 11
     }
 }

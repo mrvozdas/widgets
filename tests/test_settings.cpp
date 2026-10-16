@@ -131,6 +131,27 @@ void testRoundtrip(const QString& root) {
           "an explicitly empty widget list roundtrips without restoring defaults");
 }
 
+void testFileSizeLimit(const QString& root) {
+    w11widget::SettingsStore store(QDir(root).filePath(QStringLiteral("oversized.json")));
+    const QByteArray valid = QJsonDocument(validDocument()).toJson();
+    QByteArray boundary = valid;
+    boundary.append(QByteArray(256 * 1024 - boundary.size(), ' '));
+    check(writeBytes(store.filePath(), boundary) && store.load().ok,
+          "a valid settings document at the total file-size limit remains readable");
+    boundary.append(' ');
+    expectInvalidDocument(store, boundary, "oversized settings are rejected before JSON parsing");
+    check(store.load().error.contains(QStringLiteral("256 KiB")),
+          "an oversized settings file reports the byte limit explicitly");
+    QJsonObject nested;
+    for (int depth = 0; depth < 400; ++depth) nested = {{QStringLiteral("nested"), nested}};
+    w11widget::PanelSettings settings;
+    settings.widgets = {{QStringLiteral("nested-1"), QStringLiteral("future.widget"), false, false, 72, nested}};
+    QString error;
+    check(!store.save(settings, error) && error.contains(QStringLiteral("256 KiB")) &&
+              readBytes(store.filePath()) == boundary,
+          "a compact object whose indented file exceeds the read limit cannot replace saved settings");
+}
+
 void testLegacyFullscreenMigration(const QString& root) {
     using namespace w11widget;
     SettingsStore store(QDir(root).filePath(QStringLiteral("legacy-fullscreen.json")));
@@ -665,6 +686,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     testRoundtrip(directory.path());
+    testFileSizeLimit(directory.path());
     testLegacyFullscreenMigration(directory.path());
     testInvalidJson(directory.path());
     testWidgetValidation(directory.path());

@@ -3,6 +3,7 @@
 #include "core/WidgetConfiguration.h"
 #include "widgets/SampleWidget.h"
 #include "widgets/CountdownWidget.h"
+#include "widgets/FocusTimerWidget.h"
 #include "widgets/WorldClockWidget.h"
 
 #include <QDebug>
@@ -97,12 +98,16 @@ WidgetRegistry builtInWidgetRegistry()
         QStringLiteral("world-clock"), QStringLiteral("Dünya saati"), WidgetApiVersion,
         QUrl(QStringLiteral("qrc:/qml/WorldClockWidget.qml")),
         {{QStringLiteral("show_date"), false},
-         {QStringLiteral("time_zone"), QStringLiteral("UTC")}}, WorldClockWidget::PreferredWidthDip
+         {QStringLiteral("time_zone"), QStringLiteral("UTC")}}, WorldClockWidget::PreferredWidthDip, true
     };
     const WidgetDescriptor countdown{
         QStringLiteral("countdown"), QStringLiteral("Geri sayım"), WidgetApiVersion,
         QUrl(QStringLiteral("qrc:/qml/CountdownWidget.qml")),
-        CountdownWidget::defaultSettings(), CountdownWidget::PreferredWidthDip
+        CountdownWidget::defaultSettings(), CountdownWidget::PreferredWidthDip, true
+    };
+    const WidgetDescriptor focusTimer{
+        QStringLiteral("focus-timer"), QStringLiteral("Odak sayacı"), WidgetApiVersion,
+        QUrl(QStringLiteral("qrc:/qml/FocusTimerWidget.qml")), FocusTimerWidget::defaultSettings(), 88, true
     };
     QString error;
     if (!registry.registerWidget(sample, [] { return std::make_unique<SampleWidget>(); }, error))
@@ -110,6 +115,8 @@ WidgetRegistry builtInWidgetRegistry()
     if (!registry.registerWidget(worldClock, [] { return std::make_unique<WorldClockWidget>(); }, error))
         qWarning().noquote() << error;
     if (!registry.registerWidget(countdown, [] { return std::make_unique<CountdownWidget>(); }, error))
+        qWarning().noquote() << error;
+    if (!registry.registerWidget(focusTimer, [] { return std::make_unique<FocusTimerWidget>(); }, error))
         qWarning().noquote() << error;
     return registry;
 }

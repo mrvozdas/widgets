@@ -1,21 +1,35 @@
 cmake_minimum_required(VERSION 3.20...4.4)
 
-if(NOT EXISTS "${PACKAGE_DIR}/w11widget.exe" OR NOT EXISTS "${DUMPBIN}")
-    message(FATAL_ERROR "Runtime deployment requires the application and MSVC dumpbin.")
+if(NOT EXISTS "${PACKAGE_DIR}/w11widget.exe" OR NOT EXISTS "${DEPENDENCY_COMMAND}")
+    message(FATAL_ERROR "Runtime deployment requires the application and the compiler's dependency inspection tool.")
 endif()
 
 # Conda Qt uses external libraries that windeployqt does not collect. Resolve
 # imports of the EXE, Qt libraries and all deployed plugins recursively.
 # Prefer the runtime supplied with this Qt build; official Qt can use the
 # compiler's redistributable folder instead. Never copy Windows system DLLs.
-file(GLOB _crt_files "${QT_RUNTIME_DIR}/msvcp140*.dll"
-     "${QT_RUNTIME_DIR}/vcruntime140*.dll" "${QT_RUNTIME_DIR}/concrt140.dll")
-if(NOT _crt_files)
-    file(GLOB _crt_files "${MSVC_RUNTIME_DIR}/msvcp140*.dll"
-         "${MSVC_RUNTIME_DIR}/vcruntime140*.dll" "${MSVC_RUNTIME_DIR}/concrt140.dll")
-endif()
-if(NOT _crt_files)
-    message(FATAL_ERROR "No app-local MSVC runtime found for the standalone package.")
+if(COMPILER_FAMILY STREQUAL "MINGW")
+    foreach(_name libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll)
+        if(EXISTS "${QT_RUNTIME_DIR}/${_name}")
+            list(APPEND _crt_files "${QT_RUNTIME_DIR}/${_name}")
+        elseif(EXISTS "${COMPILER_RUNTIME_DIR}/${_name}")
+            list(APPEND _crt_files "${COMPILER_RUNTIME_DIR}/${_name}")
+        else()
+            message(FATAL_ERROR "Missing MinGW runtime library: ${_name}")
+        endif()
+    endforeach()
+elseif(COMPILER_FAMILY STREQUAL "MSVC")
+    file(GLOB _crt_files "${QT_RUNTIME_DIR}/msvcp140*.dll"
+         "${QT_RUNTIME_DIR}/vcruntime140*.dll" "${QT_RUNTIME_DIR}/concrt140.dll")
+    if(NOT _crt_files)
+        file(GLOB _crt_files "${COMPILER_RUNTIME_DIR}/msvcp140*.dll"
+             "${COMPILER_RUNTIME_DIR}/vcruntime140*.dll" "${COMPILER_RUNTIME_DIR}/concrt140.dll")
+    endif()
+    if(NOT _crt_files)
+        message(FATAL_ERROR "No app-local MSVC runtime found for the standalone package.")
+    endif()
+else()
+    message(FATAL_ERROR "Unknown compiler runtime family: ${COMPILER_FAMILY}")
 endif()
 file(COPY ${_crt_files} DESTINATION "${PACKAGE_DIR}")
 
@@ -23,13 +37,13 @@ file(GLOB _libraries "${PACKAGE_DIR}/*.dll")
 file(GLOB_RECURSE _modules "${PACKAGE_DIR}/*.dll")
 list(REMOVE_ITEM _modules ${_libraries})
 set(CMAKE_GET_RUNTIME_DEPENDENCIES_PLATFORM "windows+pe")
-set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL "dumpbin")
-set(CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND "${DUMPBIN}")
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL "${DEPENDENCY_TOOL}")
+set(CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND "${DEPENDENCY_COMMAND}")
 file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES "${PACKAGE_DIR}/w11widget.exe"
     LIBRARIES ${_libraries}
     MODULES ${_modules}
-    DIRECTORIES "${PACKAGE_DIR}" "${QT_RUNTIME_DIR}" "${QT_BIN_DIR}"
+    DIRECTORIES "${PACKAGE_DIR}" "${QT_RUNTIME_DIR}" "${QT_BIN_DIR}" "${COMPILER_RUNTIME_DIR}"
     PRE_EXCLUDE_REGEXES "^api-ms-" "^ext-ms-"
     POST_EXCLUDE_REGEXES ".*[/\\][Ss][Yy][Ss][Tt][Ee][Mm]32[/\\].*"
                          "^[A-Za-z]:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\].*"
@@ -67,4 +81,4 @@ foreach(_dependency IN LISTS _resolved)
         message(STATUS "Additional runtime: ${_name}")
     endif()
 endforeach()
-message(STATUS "Standalone runtime imports resolved; added ${_copied} libraries and app-local MSVC runtime.")
+message(STATUS "Standalone runtime imports resolved; added ${_copied} libraries and app-local ${COMPILER_FAMILY} runtime.")

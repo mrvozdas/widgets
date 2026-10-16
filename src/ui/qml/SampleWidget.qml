@@ -3,6 +3,7 @@ import QtQuick
 Rectangle {
     id: sample
 
+    property string widgetInstanceId
     property var widgetModel
     property var requestPanelSettings
 
@@ -27,7 +28,7 @@ Rectangle {
         anchors.right: countBadge.left
         anchors.rightMargin: 5
         anchors.verticalCenter: parent.verticalCenter
-        text: sample.widgetModel ? sample.widgetModel.label : "Örnek"
+        text: sample.widgetModel ? sample.widgetModel.label : I18n.text("ui.ornek")
         color: "#eef1f4"
         font.family: "Segoe UI"
         font.pixelSize: 11
