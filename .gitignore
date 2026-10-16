@@ -1,0 +1,35 @@
+# Deny every file by default, including files added in the future.
+*
+
+# Private instructions, development notes and plans: never publish.
+/devel-log.md
+/sad.md
+/rules.md
+/README_for_ai.md
+/masterplan.md
+/TODO.md
+/AGENTS.md
+/.agents/
+/.codex/
+/.publish-prep/
+
+# Source code, tests, tools, settings, builds and all historical versions.
+/src/
+/tests/
+/scripts/
+/installer/
+/config/
+/build/
+/build-overlay/
+/CMakeLists.txt
+
+# Only the end-user guide, its four images and this policy are versioned.
+# Only the selected final installer is uploaded separately to GitHub Releases.
+!/.gitignore
+!/README.md
+!/docs/
+!/docs/screenshots/
+!/docs/screenshots/panel.png
+!/docs/screenshots/panel-controls.png
+!/docs/screenshots/world-clock-settings.png
+!/docs/screenshots/countdown-settings.png
